@@ -72,21 +72,24 @@ void VK_NAMESPACE::Image::TransitionLayout(
 
 	mChunk.ImageHandles->Config.CurrLayout = NewLayout;
 	mChunk.ImageHandles->Config.PrevStage = usageStage;
+
+	mChunk.ImageHandles->mRecordedLayout = { mChunk.ImageHandles->Config.CurrLayout,
+		mChunk.ImageHandles->Config.PrevStage };
 }
 
 void VK_NAMESPACE::Image::BeginCommands(vk::CommandBuffer commandBuffer) const
 {
 	DefaultBegin(commandBuffer);
 
-	mChunk.mRecordedLayout = { mChunk.ImageHandles->Config.CurrLayout,
-	mChunk.ImageHandles->Config.PrevStage };
+	mChunk.ImageHandles->mRecordedLayout = { mChunk.ImageHandles->Config.CurrLayout,
+		mChunk.ImageHandles->Config.PrevStage };
 }
 
 void VK_NAMESPACE::Image::RecordBlit(const Image& src, 
 	const ImageBlitInfo& blitInfo, bool restoreOriginalLayout /*= true*/) const
 {
-	auto DstLayout = mChunk.mRecordedLayout;
-	auto SrcLayout = src.mChunk.mRecordedLayout;
+	auto DstLayout = mChunk.ImageHandles->mRecordedLayout;
+	auto SrcLayout = src.mChunk.ImageHandles->mRecordedLayout;
 
 	auto OwnerCaps = mProcessHandler.GetQueueManager().GetFamilyCapabilities(
 		mChunk.ImageHandles->Config.ResourceOwner);
@@ -110,17 +113,17 @@ void VK_NAMESPACE::Image::RecordBlit(const Image& src,
 void VK_NAMESPACE::Image::RecordTransitionLayout(vk::ImageLayout newLayout, 
 	vk::PipelineStageFlags usageStage) const
 {
-	if (mChunk.mRecordedLayout.Layout == newLayout)
+	if (mChunk.ImageHandles->mRecordedLayout.Layout == newLayout)
 		return;
 
 	auto OwnerCaps = mProcessHandler.GetQueueManager().GetFamilyCapabilities(
 		mChunk.ImageHandles->Config.ResourceOwner);
 
 	RecordTransitionLayoutInternal(newLayout, usageStage,
-		mChunk.mRecordedLayout.Layout, mChunk.mRecordedLayout.Stages,
+		mChunk.ImageHandles->mRecordedLayout.Layout, mChunk.ImageHandles->mRecordedLayout.Stages,
 		mWorkingCommandBuffer, OwnerCaps);
 
-	mChunk.mRecordedLayout = { newLayout, usageStage };
+	mChunk.ImageHandles->mRecordedLayout = { newLayout, usageStage };
 }
 
 void VK_NAMESPACE::Image::EndCommands() const

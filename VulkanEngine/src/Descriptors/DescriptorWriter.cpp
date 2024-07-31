@@ -2,6 +2,21 @@
 
 VK_BEGIN
 
+DescriptorWriter::DescriptorWriter(DescriptorWriter&& Other) noexcept
+	: mDevice(Other.mDevice), mDescriptorSets(std::move(Other.mDescriptorSets))
+{
+	Other.mDevice.Reset();
+}
+
+DescriptorWriter& DescriptorWriter::operator=(DescriptorWriter&& Other) noexcept
+{
+	mDevice = Other.mDevice;
+	mDescriptorSets = std::move(Other.mDescriptorSets);
+
+	Other.mDevice.Reset();
+	return *this;
+}
+
 void DescriptorWriter::Update(
 	const DescriptorLocation& info,
 	const StorageBufferWriteInfo& bufferInfo) const

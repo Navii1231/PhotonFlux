@@ -1,6 +1,7 @@
 #include "ShaderCompiler/ShaderCompiler.h"
 #include "spirv_cross/spirv_cross.hpp"
 #include "spirv_cross/spirv_glsl.hpp"
+#include "spirv-tools/optimizer.hpp"
 
 #include "ShaderCompiler/Lexer.h"
 
@@ -140,6 +141,25 @@ VK_NAMESPACE::CompileResult VK_NAMESPACE::ShaderCompiler::Compile(ShaderInput&& 
 	if (!ParseShader(Result, EShStage))
 		return Result;
 
+	/********************* OPTIMISATIONS **************************/
+
+	// Aggressively optimize as much as we can for now
+	// TODO: Take a parameter/enum in the input to define how to optimize
+	// For example: Optimize for size or performance or not all
+
+	std::vector<uint32_t> OptimizedCode;
+
+	spvtools::Optimizer Optimizer(spv_target_env::SPV_ENV_VULKAN_1_3);
+
+	Optimizer.RegisterPerformancePasses();
+
+	bool Success = Optimizer.Run(Result.SPIR_V.ByteCode.data(), Result.SPIR_V.ByteCode.size(), &OptimizedCode);
+
+	if (Success)
+		Result.SPIR_V.ByteCode = std::move(OptimizedCode);
+
+	/**************************************************************/
+
 	ReflectDescriptorLayouts(Result);
 	ReflectShaderMetaData(Result);
 
@@ -165,7 +185,7 @@ VK_NAMESPACE::CompileResult VK_NAMESPACE::ShaderCompiler::Compile(const ShaderIn
 bool VK_NAMESPACE::ShaderCompiler::PreprocessShader(
 	CompileResult& ResultRef, EShLanguage Stage)
 {
-	auto TShader = MakeGLSLangShader(mEnvironment.GetConfig(), Stage);
+	auto TShader = MakeGLSLangShader(mEnvironment, Stage);
 	const char* Source = ResultRef.Error.SrcCode.c_str();
 
 	TShader.setStrings(&Source, 1);
@@ -187,10 +207,19 @@ bool VK_NAMESPACE::ShaderCompiler::PreprocessShader(
 
 bool VK_NAMESPACE::ShaderCompiler::ParseShader(CompileResult& Result, EShLanguage Stage)
 {
-	auto TShader = MakeGLSLangShader(mEnvironment.GetConfig(), Stage);
+	auto TShader = MakeGLSLangShader(mEnvironment, Stage);
 	const char* Source = Result.Error.PreprocessedCode.c_str();
 
 	TShader.setStrings(&Source, 1);
+
+	std::string Preamble;
+
+	for (const auto& [macro, define] : mEnvironment.GetMacroDefines())
+	{
+		Preamble += "#define " + macro + " " + define + "\n";
+	}
+
+	TShader.setPreamble(Preamble.c_str());
 
 	glslang::TShader::ForbidIncluder basicIncluder = glslang::TShader::ForbidIncluder();
 
@@ -240,18 +269,20 @@ void VK_NAMESPACE::ShaderCompiler::ResetInternal(const CompilerConfig& new_in)
 }
 
 glslang::TShader VK_NAMESPACE::ShaderCompiler::MakeGLSLangShader(
-	const CompilerConfig& in, EShLanguage Stage)
+	const CompilerEnvironment& in, EShLanguage Stage)
 {
+	const auto& config = in.GetConfig();
+
 	glslang::TShader shader(Stage);
 
 	shader.setEnvInput(
 		glslang::EShSourceGlsl,
 		Stage,
 		glslang::EShClientVulkan,
-		in.GlslVersion);
+		config.GlslVersion);
 
-	shader.setEnvClient(glslang::EShClientVulkan, in.VulkanVersion);
-	shader.setEnvTarget(glslang::EShTargetSpv, in.SPV_Version);
+	shader.setEnvClient(glslang::EShClientVulkan, config.VulkanVersion);
+	shader.setEnvTarget(glslang::EShTargetSpv, config.SPV_Version);
 
 	return shader;
 }
