@@ -1,0 +1,495 @@
+#version 440
+
+#ifndef RAY_TRACER_CONFIG_GLSL
+#define RAY_TRACER_CONFIG_GLSL
+
+struct Ray
+{
+	vec3 Origin;
+	vec3 Direction;
+};
+
+struct Material
+{
+	vec3 Color;
+	float EmissionStrength;
+};
+
+struct LightProperties
+{
+	vec3 Color;
+};
+
+struct MeshInfo
+{
+	uint BeginIndex;
+	uint EndIndex;
+	Material SurfaceMaterial;
+};
+
+struct LightInfo
+{
+	uint BeginIndex;
+	uint EndIndex;
+	LightProperties Props;
+};
+
+vec3 GetPoint(Ray ray, float Par)
+{
+	return ray.Origin + ray.Direction * Par;
+}
+
+layout (std140, set = 1, binding = 0) uniform CameraUniform
+{
+	vec3 Position;
+	vec3 Direction;
+	vec3 Tangent;
+	vec3 Bitangent;
+} uCamera;
+
+layout (std430, set = 1, binding = 1) buffer VertexBuffer
+{
+	vec3 Positions[];
+} sVertexBuffer;
+
+layout (std430, set = 1, binding = 2) buffer IndexBuffer
+{
+	uvec4 Indices[];
+} sIndexBuffer;
+
+layout (std430, set = 1, binding = 3) buffer MeshInfoBuffer
+{
+	MeshInfo Infos[];
+} sMeshInfos;
+
+layout (std430, set = 1, binding = 4) buffer LightInfoBuffer
+{
+	LightInfo Infos[];
+} sLightInfos;
+
+layout (std140, set = 1, binding = 5) uniform SceneInfo
+{
+	ivec2 ImageResolution;
+	uint MeshCount;
+	uint LightCount;
+	uint MaxBounceLimit;
+	uint RaysCreatedPerHit;
+
+	uint RandomSeed;
+	uint ResetImage;
+	uint FrameCount;
+} uSceneInfo;
+
+#endif
+
+#ifndef COLLISIONS_GLSL
+#define COLLISIONS_GLSL
+
+#ifndef RAY_TRACER_CONFIG_GLSL
+#define RAY_TRACER_CONFIG_GLSL
+
+struct Ray
+{
+	vec3 Origin;
+	vec3 Direction;
+};
+
+struct Material
+{
+	vec3 Color;
+	float EmissionStrength;
+};
+
+struct LightProperties
+{
+	vec3 Color;
+};
+
+struct MeshInfo
+{
+	uint BeginIndex;
+	uint EndIndex;
+	Material SurfaceMaterial;
+};
+
+struct LightInfo
+{
+	uint BeginIndex;
+	uint EndIndex;
+	LightProperties Props;
+};
+
+vec3 GetPoint(Ray ray, float Par)
+{
+	return ray.Origin + ray.Direction * Par;
+}
+
+layout (std140, set = 1, binding = 0) uniform CameraUniform
+{
+	vec3 Position;
+	vec3 Direction;
+	vec3 Tangent;
+	vec3 Bitangent;
+} uCamera;
+
+layout (std430, set = 1, binding = 1) buffer VertexBuffer
+{
+	vec3 Positions[];
+} sVertexBuffer;
+
+layout (std430, set = 1, binding = 2) buffer IndexBuffer
+{
+	uvec4 Indices[];
+} sIndexBuffer;
+
+layout (std430, set = 1, binding = 3) buffer MeshInfoBuffer
+{
+	MeshInfo Infos[];
+} sMeshInfos;
+
+layout (std430, set = 1, binding = 4) buffer LightInfoBuffer
+{
+	LightInfo Infos[];
+} sLightInfos;
+
+layout (std140, set = 1, binding = 5) uniform SceneInfo
+{
+	ivec2 ImageResolution;
+	uint MeshCount;
+	uint LightCount;
+	uint MaxBounceLimit;
+	uint RaysCreatedPerHit;
+
+	uint RandomSeed;
+	uint ResetImage;
+	uint FrameCount;
+} uSceneInfo;
+
+#endif
+
+
+const float FLT_MAX = 3.4028235e+38;
+const float TOLERENCE = 0.00001;
+
+struct CollisionInfo
+{
+	// Values set by the collision solver...
+	bool HitOccured;
+	float RayDis;
+	vec3 Normal;
+	vec3 IntersectionPoint;
+	float NormalInverted;
+
+	// Values set by the collider...
+	Material ObjectMaterial;
+	LightProperties LightProps;
+
+	bool IsLightSrc;
+};
+
+void CheckRayTriangleCollision(inout CollisionInfo hitInfo, Ray ray, vec3 A, vec3 B, vec3 C)
+{
+	hitInfo.HitOccured = false;
+
+	vec3 Edge1 = B - A;
+	vec3 Edge2 = C - B;
+	vec3 Edge3 = A - C;
+
+	vec3 Normal = cross(Edge1, Edge2);
+	
+	float Determinant = dot(Normal, ray.Direction);
+
+	if(abs(Determinant) < 0.0001)
+		return;
+
+	float Alpha = dot(Normal, (A - ray.Origin)) / Determinant;
+
+	vec3 PlaneHitPoint = GetPoint(ray, Alpha);
+
+	vec3 Cross1 = cross(Edge1, PlaneHitPoint - A);
+	vec3 Cross2 = cross(Edge2, PlaneHitPoint - B);
+	vec3 Cross3 = cross(Edge3, PlaneHitPoint - C);
+
+	float b1 = dot(Cross1, Normal);
+	float b2 = dot(Cross2, Normal);
+	float b3 = dot(Cross3, Normal);
+
+	hitInfo.IntersectionPoint = PlaneHitPoint;
+	hitInfo.Normal = normalize(Normal);
+	hitInfo.RayDis = Alpha;
+	hitInfo.HitOccured = (b1 >= 0.0 && b2 >= 0.0 && b3 >= 0.0) && Alpha > TOLERENCE;
+
+	hitInfo.NormalInverted = dot(Normal, ray.Direction) < 0 ? 1.0 : -1.0;
+	hitInfo.Normal *= hitInfo.NormalInverted;
+}
+
+void CheckForRayCollisions(inout CollisionInfo ClosestHit, Ray ray)
+{
+	CollisionInfo hitInfo;
+
+	hitInfo.IsLightSrc = false;
+
+	ClosestHit.HitOccured = false;
+	ClosestHit.RayDis = FLT_MAX;
+	ClosestHit.IsLightSrc = false;
+
+	// For all the objects...
+
+	for (uint i = 0; i < uSceneInfo.MeshCount; i++)
+	{
+		for (uint j = sMeshInfos.Infos[i].BeginIndex; j < sMeshInfos.Infos[i].EndIndex; j++)
+		{
+			vec3 A = sVertexBuffer.Positions[sIndexBuffer.Indices[j].x];
+			vec3 B = sVertexBuffer.Positions[sIndexBuffer.Indices[j].y];
+			vec3 C = sVertexBuffer.Positions[sIndexBuffer.Indices[j].z];
+
+			CheckRayTriangleCollision(hitInfo, ray, A, B, C);
+			hitInfo.ObjectMaterial = sMeshInfos.Infos[i].SurfaceMaterial;
+
+			ClosestHit = hitInfo.HitOccured ? (hitInfo.RayDis < ClosestHit.RayDis ?
+				hitInfo : ClosestHit) : ClosestHit;
+		}
+	}
+
+	// For all the light sources...
+
+	for (uint i = 0; i < uSceneInfo.LightCount; i++)
+	{
+		for (uint j = sLightInfos.Infos[i].BeginIndex; j < sLightInfos.Infos[i].EndIndex; j++)
+		{
+			vec3 A = sVertexBuffer.Positions[sIndexBuffer.Indices[j].x];
+			vec3 B = sVertexBuffer.Positions[sIndexBuffer.Indices[j].y];
+			vec3 C = sVertexBuffer.Positions[sIndexBuffer.Indices[j].z];
+
+			CheckRayTriangleCollision(hitInfo, ray, A, B, C);
+			hitInfo.IsLightSrc = true;
+			hitInfo.LightProps = sLightInfos.Infos[i].Props;
+
+			ClosestHit = hitInfo.HitOccured ? (hitInfo.RayDis < ClosestHit.RayDis ?
+				hitInfo : ClosestHit) : ClosestHit;
+		}
+	}
+}
+
+
+#endif
+#ifndef SHADING_GLSL
+#define SHADING_GLSL
+
+// Blinn Phong model...
+
+float CalcDiffuseFactor(vec3 Normal, vec3 IncomingRayDirection)
+{
+	float Factor = dot(Normal, IncomingRayDirection);
+	return Factor > 0.0 ? Factor : 0.0;
+}
+
+float CalcSpecularFactor(vec3 Normal, vec3 IncomingRayDir, vec3 ViewDir, float Shininess)
+{
+	vec3 halfVector = normalize(ViewDir + IncomingRayDir);
+
+	if(dot(halfVector, halfVector) < 0.001)
+		return 0.0;
+
+	float Factor = dot(halfVector, Normal);
+	return Factor > 0.0 ? pow(Factor, Shininess) : 0.0;
+}
+
+#endif
+#ifndef RANDOM_GLSL
+#define RANDOM_GLSL
+
+#define MATH_PI 3.14159265358979323846
+
+float GetRandom(inout uint state)
+{
+	state *= state * 747796405 + 2891336453;
+	uint result = ((state >> (state >> 28) + 4) ^ state) * 277803737;
+	result = (result >> 22) ^ result;
+	return result / 4294967295.0;
+}
+
+// Function to generate a random spherically uniform vector
+vec3 RandomUnitVector(inout uint state) {
+    float u = GetRandom(state);
+    float v = GetRandom(state); // Offset to get a different random number
+    float theta = u * 2.0 * MATH_PI; // Random azimuthal angle in [0, 2*pi]
+    float phi = v * MATH_PI; // Random polar angle, acos maps [0,1] to [0,pi]
+
+    // Convert spherical coordinates to Cartesian coordinates
+    float x = sin(phi) * cos(theta);
+    float y = sin(phi) * sin(theta);
+    float z = cos(phi);
+
+    return vec3(x, y, z);
+}
+
+vec3 RandomUnitVectorHemisphere(vec3 Normal, inout uint state)
+{
+    vec3 RandomUnit = RandomUnitVector(state);
+    return dot(RandomUnit, Normal) < 0.0 ? -RandomUnit : RandomUnit;
+}
+
+vec3 RandomPointOnTriangle(vec3 A, vec3 B, vec3 C, inout uint state)
+{
+    float u = GetRandom(state);
+    float v = GetRandom(state);
+    float w = GetRandom(state);
+
+    return (u * A + v * B + w * C) / (u + v + w);
+}
+
+#endif
+
+layout (local_size_x = 8, local_size_y = 4) in;
+
+layout (set = 0, binding = 0, rgba8) uniform image2D ImageOutput;
+layout (set = 0, binding = 1, rgba32f) uniform image2D ColorBuffer;
+
+uint sRandomGeneratorSeed;
+const vec3 SunlightDirection = {-1.0, -1.0, 1.0};
+
+vec3 CalcShading(CollisionInfo hitInfo, Ray inRay, Ray outRay, float attenuation)
+{
+	float DiffuseFactor = CalcDiffuseFactor(hitInfo.Normal, -inRay.Direction);
+	float SpecularFactor = CalcSpecularFactor(hitInfo.Normal, -inRay.Direction, outRay.Direction, 32.0);
+
+	vec3 DiffuseColor = hitInfo.ObjectMaterial.Color * attenuation * DiffuseFactor;
+	vec3 SpecularColor = vec3(attenuation * SpecularFactor);
+
+	return DiffuseColor + SpecularColor;
+}
+
+void CastShadowRays(inout vec3 IncomingLight, Ray inRay, inout CollisionInfo hitInfo, float attenuation)
+{
+	const uint SampleCount = 1;
+	CollisionInfo localHitInfo;
+
+	for (uint i = 0; i < uSceneInfo.LightCount; i++)
+	{
+		vec3 CollectedLight = vec3(0.0);
+		uint TriangleCount = (sLightInfos.Infos[i].EndIndex - sLightInfos.Infos[i].BeginIndex);
+
+		for (uint j = sLightInfos.Infos[i].BeginIndex; j < sLightInfos.Infos[i].EndIndex; j++)
+		{
+			vec3 A = sVertexBuffer.Positions[sIndexBuffer.Indices[j].x];
+			vec3 B = sVertexBuffer.Positions[sIndexBuffer.Indices[j].y];
+			vec3 C = sVertexBuffer.Positions[sIndexBuffer.Indices[j].z];
+
+			for(uint SampleCurr = 0; SampleCurr < SampleCount; SampleCurr++)
+			{
+				vec3 Sample = RandomPointOnTriangle(A, B, C, sRandomGeneratorSeed);
+
+				Ray outRay;
+
+				outRay.Origin = hitInfo.IntersectionPoint;
+				outRay.Direction = normalize(Sample - outRay.Origin);
+
+				CheckForRayCollisions(localHitInfo, outRay);
+
+				CollectedLight += localHitInfo.IsLightSrc && localHitInfo.HitOccured
+					&& localHitInfo.NormalInverted < 0.5 ?
+					CalcShading(hitInfo, inRay, outRay, attenuation) *
+					dot(-outRay.Direction, localHitInfo.Normal) * sLightInfos.Infos[i].Props.Color : vec3(0.0);
+			}
+		}
+
+		IncomingLight += CollectedLight / float(SampleCount * TriangleCount);
+	}
+}
+
+vec3 TraceRay(Ray ray)
+{
+	vec3 IncomingLight = vec3(0.0);
+	const float AttenuationFactor = 0.4;
+	float Attenuation = AttenuationFactor;
+
+	CollisionInfo hitInfo;
+	CheckForRayCollisions(hitInfo, ray);
+
+	if(!hitInfo.HitOccured)
+		return vec3(1.0, 1.0, 0.0);
+
+	if(hitInfo.IsLightSrc)
+		return hitInfo.LightProps.Color;
+
+	CastShadowRays(IncomingLight, ray, hitInfo, Attenuation);
+
+	for(uint i = 0; i < uSceneInfo.MaxBounceLimit; i++)
+	{
+		Ray OldRay = ray;
+
+		ray.Origin = hitInfo.IntersectionPoint + hitInfo.Normal * TOLERENCE;
+		ray.Direction = RandomUnitVectorHemisphere(hitInfo.Normal, sRandomGeneratorSeed);
+		
+		CollisionInfo previousHitInfo = hitInfo;
+		CheckForRayCollisions(hitInfo, ray);
+
+		Attenuation *= AttenuationFactor;
+
+		if(!hitInfo.HitOccured || hitInfo.IsLightSrc)
+		{
+			IncomingLight += float(!hitInfo.IsLightSrc) * vec3(0.0, 0.0, 0.0);
+			break;
+		}
+
+		CastShadowRays(IncomingLight, ray, hitInfo, Attenuation);
+	}
+	
+	return IncomingLight;
+}
+
+void main()
+{
+	uvec2 Position = gl_GlobalInvocationID.xy;
+	//gPosition = ivec2(Position);
+
+	sRandomGeneratorSeed = Position.x * uSceneInfo.RandomSeed + Position.y * (Position.x + 2189372);
+
+	if(Position.x >= uSceneInfo.ImageResolution.x || Position.y >= uSceneInfo.ImageResolution.y)
+		return;
+
+	vec2 RawOffset = (vec2(Position) - vec2(uSceneInfo.ImageResolution) / 2.0) / vec2(uSceneInfo.ImageResolution);
+	RawOffset.y = -RawOffset.y;
+
+	RawOffset.y *= 900.0 / 1600.0;
+
+	RawOffset *= 2.0;
+
+	Ray ray;
+	ray.Origin = uCamera.Position;
+	ray.Direction = normalize(uCamera.Direction + 
+		(uCamera.Tangent * RawOffset.x + uCamera.Bitangent * RawOffset.y));
+
+	const int PixelSamples = 10;
+
+	vec3 IncomingLight = vec3(0.0)
+	for(int i = 0; i < 10; i++)
+		IncomingLight += TraceRay(ray);
+
+	IncomingLight /= PixelSamples;
+
+	vec4 ExistingColor = imageLoad(ColorBuffer, ivec2(Position));
+
+	CollisionInfo hitInfo;
+	hitInfo.Normal = vec3(0.0, 0.0, -1.0);
+	hitInfo.NormalInverted = 0.0;
+	hitInfo.RayDis = 2.0;
+	hitInfo.HitOccured = true;
+	hitInfo.ObjectMaterial.Color = vec3(1.0, 0.0, 1.0);
+
+	Ray outRay;
+	outRay.Direction = vec3(0.0, 0.0, -1.0);
+
+	vec4 Color = ExistingColor + vec4(IncomingLight, 0.0);
+	//vec4 Color = ExistingColor + vec4(CalcShading(hitInfo, ray, outRay, 1.0), 1.0);
+	
+	if(bool(uSceneInfo.ResetImage))
+		//Color = vec4(CalcShading(hitInfo, ray, outRay, 1.0), 1.0);
+		Color = vec4(IncomingLight, 1.0);
+
+	imageStore(ColorBuffer, ivec2(Position), Color);
+	imageStore(ImageOutput, ivec2(Position), Color / uSceneInfo.FrameCount);
+	//imageStore(ImageOutput, ivec2(Position), Color);
+	//imageStore(ImageOutput, ivec2(Position), vec4(vec3(1.0), 1.0));
+}
