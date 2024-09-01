@@ -5,8 +5,9 @@ bool ComputePipelineTester::OnStart()
 {
 	PhFlux::EstimatorCreateInfo createInfo{ *mDevice };
 	createInfo.ShaderDirectory = "D:/Dev/VulkanEngine/vkEngineTester/Shaders/RayTracer";
-	createInfo.TargetResolution = { 1024, 1024 };
-	createInfo.TileSize = { 1024, 1024 };
+	createInfo.TargetResolution = { 1920, 1080 };
+	createInfo.TileSize = { 240, 135 };
+	//createInfo.TileSize = { 1920, 1080 };
 
 	mEstimator = std::make_shared<PhFlux::ComputeEstimator>(createInfo);
 
@@ -272,41 +273,80 @@ void ComputePipelineTester::PresentScreen(uint32_t FrameIndex, vkEngine::Swapcha
 void ComputePipelineTester::SetScene()
 {
 	PhFlux::TraceInfo traceInfo;
-	traceInfo.BVH_Depth = 8;
+	traceInfo.BVH_Depth = 24;
 	traceInfo.CameraInfo = mCameraData.mCamera;
-	traceInfo.MinBounceLimit = 3;
-	traceInfo.MaxBounceLimit = 8;
+	traceInfo.MinBounceLimit = 12;
+	traceInfo.MaxBounceLimit = 12;
 	traceInfo.MaxSamples = 4096;
 	traceInfo.PixelSamplesPerBatch = 2;
 
 	PhFlux::Material material;
-	material.Albedo = { 0.1f, 0.1f, 0.1f };
-	material.Metallic = 0.1f;
-	material.Roughness = 0.4f;
+	material.Albedo = { 0.6f, 0.0f, 0.6f };
+	//material.Albedo = { 1.0f, 1.0f, 1.0f };
+	material.Metallic = 0.2f;
+	//material.Metallic = 1.0f;
+	material.Roughness = 0.6f;
+	//material.Roughness = 0.000001f;
 	//material.Reflectivity = { 0.04f, 0.04f, 0.04f };
-	material.RefractiveIndex = 10.0f;
+	material.RefractiveIndex = 4.5f;
 	material.Transmission = 0.0f;
 
 	mEstimator->Begin(traceInfo);
 	mEstimator->SubmitRenderable(mCube[0], material, PhFlux::RenderableType::eObject);
 
+	material.Albedo = { 1.0f, 1.0f, 1.0f };
+	material.Albedo = { 229.0f / 256.0f, 184.0f / 256.0f, 11.0f / 256.0f };
+	material.Metallic = 0.8f;
+	material.Roughness = 0.0001f;
+	//material.Reflectivity = material.Albedo;
+	material.RefractiveIndex = 1.5f;
+	material.Transmission = 0.0f;
+
+	//mEstimator->SubmitRenderable(mCup[0], material, PhFlux::RenderableType::eObject);
+
+	material.Albedo = { 1.0f, 1.0f, 1.0f };
+	material.Metallic = 0.9f;
+	material.Roughness = 0.001f;
+	material.RefractiveIndex = 4.5f;
+	material.Transmission = 0.0f;
+
+	mEstimator->SubmitRenderable(mCube[4], material, PhFlux::RenderableType::eObject);
+
+#if 0
+	material.Albedo = { 1.0f, 1.0f, 1.0f };
+	material.Albedo = { 0.0f, 10.0f, 10.0f };
+	material.Metallic = 0.9f;
+	material.Roughness = 0.001f;
+	material.RefractiveIndex = 4.5f;
+	material.Transmission = 0.0f;
+
+	//mEstimator->SubmitRenderable(mCube[4], material, PhFlux::RenderableType::eObject);
+	mEstimator->SubmitRenderable(mCube[5], material, PhFlux::RenderableType::eLightSrc);
+
+	material.Albedo = { 0.0f, 0.0f, 10.0f };
+
+	mEstimator->SubmitRenderable(mCube[6], material, PhFlux::RenderableType::eLightSrc);
+
+#endif
+
 	material.Albedo = { 229.0f / 256.0f, 184.0f / 256.0f, 11.0f / 256.0f };
 	material.Albedo = { 1.0f, 1.0f, 1.0f };
 	material.Metallic = 0.0f;
-	material.Roughness = 0.00001f;
-	//material.Reflectivity = material.Albedo;
+	material.Roughness = 0.0001f;
 	material.RefractiveIndex = 1.5f;
 	material.Transmission = 1.0f;
 
-	mEstimator->SubmitRenderable(mCube[3], material, PhFlux::RenderableType::eObject);
+	//mEstimator->SubmitRenderable(mCube[3], material, PhFlux::RenderableType::eObject);
 
-	material.Albedo = { 1.0f, 1.0f, 1.0f };
-	material.Metallic = 1.0f;
-	material.Roughness = 0.1f;
-	material.RefractiveIndex = 1.0f;
+	material.Albedo = { 0.0f, 0.0f, 1.0f };
+	material.Albedo = { 229.0f / 256.0f, 184.0f / 256.0f, 11.0f / 256.0f };
+	material.Albedo = { 192.0f / 256.0f, 192.0f / 256.0f, 192.0f / 256.0f };
+	material.Metallic = 0.95f;
+	material.Roughness = 0.001f;
+	material.RefractiveIndex = 4.5f;
 	material.Transmission = 0.0f;
 
-	//mEstimator->SubmitRenderable(mCube[2], material, PhFlux::RenderableType::eObject);
+	mEstimator->SubmitRenderable(mCube[2], material, PhFlux::RenderableType::eObject);
 
 	material.Albedo = { 10.0f, 10.0f, 10.0f };
 	mEstimator->SubmitRenderable(mCube[1], material, PhFlux::RenderableType::eLightSrc);

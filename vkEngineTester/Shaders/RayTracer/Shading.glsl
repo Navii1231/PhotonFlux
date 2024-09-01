@@ -40,12 +40,14 @@ vec3 GammaCorrectionInv(in vec3 color)
 
 float RefractionJacobian(float IdotH, float VdotH, float RefractiveIndex)
 {
-    float Num = RefractiveIndex * RefractiveIndex * VdotH;
-    float Denom = max(IdotH + RefractiveIndex * VdotH, SHADING_TOLERENCE);
+    float Num = RefractiveIndex * RefractiveIndex * abs(VdotH);
+    float Denom = IdotH + RefractiveIndex * VdotH;
 
-    float Value = Num / (Denom * Denom);
+    float Value = Num / max(Denom * Denom, SHADING_TOLERENCE);
 
-    return max(Value, SHADING_TOLERENCE);
+    const float MaxJacobian_Value = 1.0 / (2.0 * TOLERENCE);;
+
+    return clamp(Value, SHADING_TOLERENCE, MaxJacobian_Value);
 }
 
 // Sampling the environment map...
@@ -118,7 +120,7 @@ float GeometrySmith(float NdotV, float NdotL, float Roughness)
 }
 
 // Compute normal distribution function using GGX/Trowbridge-Reitz
-float DistributionGGX(float NdotH, float Roughness) 
+float DistributionGGX(float NdotH, float Roughness)
 {
     NdotH = max(NdotH, SHADING_TOLERENCE);
     
@@ -159,8 +161,8 @@ float PDF_GGXVNDF_Refraction(in vec3 Normal, in vec3 ViewDir,
     float G1 = GeometrySchlickGGX(abs(NdotV), Roughness);
     float D_w = DistributionGGX(NdotH, Roughness);
 
-    return (G1 * D_w * max(abs(VdotH), SHADING_TOLERENCE)) /
-        max(abs(NdotV), SHADING_TOLERENCE);// * RefractionJacobian(IdotH, VdotH, RefractiveIndex);
+    return (G1 * D_w * abs(IdotH)) /
+        max(abs(NdotV), SHADING_TOLERENCE) * RefractionJacobian(IdotH, VdotH, RefractiveIndex);
 }
 
 vec3 CookTorranceBRDF(in BSDF_Input bsdfInput)
@@ -172,7 +174,6 @@ vec3 CookTorranceBRDF(in BSDF_Input bsdfInput)
     if(dot(L, N) < 0.0)
         return vec3(1.0, 0.0, 0.0);
 #endif
-
     vec3 ViewDir = reflect(-bsdfInput.LightDir, bsdfInput.HalfVec);
 
     float NdotH = max(dot(bsdfInput.Normal, bsdfInput.HalfVec), SHADING_TOLERENCE);
@@ -217,7 +218,10 @@ vec3 CookTorranceBTDF(in BSDF_Input bsdfInput)
     vec3 T = refract(-bsdfInput.LightDir, -bsdfInput.HalfVec, RefractiveIndex);
 
     if(length(T) == 0.0)
-        return vec3(0);
+        return vec3(0, 0, 0);
+
+    if (RefractiveIndex == 1.0)
+        return vec3(1.0);
 
     T = normalize(T);
 
@@ -245,16 +249,14 @@ vec3 CookTorranceBTDF(in BSDF_Input bsdfInput)
     vec3 kD = R;
     kD *= 1.0 - bsdfInput.TransmissionWeight;
 
-    vec3 numerator = LdotH * NDF * G2 * R;// * RefractionJacobian(LdotH, TdotH, RefractiveIndex);
-    float denominator = max(abs(NdotT), SHADING_TOLERENCE) * NdotL;
-    denominator = NdotL;
+    vec3 numerator = LdotH * NDF * G2 * R * RefractionJacobian(LdotH, TdotH, 1.0 / RefractiveIndex);
+    float denominator = max(abs(NdotT) * NdotL, SHADING_TOLERENCE);
 
     vec3 radiance = numerator / denominator;
 
     vec3 Lo = (kD * bsdfInput.BaseColor / MATH_PI + radiance) * NdotL;
 
-    if(RefractiveIndex == 1.0)
-        return vec3(100, 0, 0);
+    //Lo = radiance * NdotL;
 
     return Lo;
 }

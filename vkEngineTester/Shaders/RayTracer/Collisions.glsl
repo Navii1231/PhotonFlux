@@ -24,19 +24,6 @@ struct CollisionInfo
 	bool IsLightSrc;
 };
 
-struct StackEntry
-{
-	CollisionInfo HitInfo;
-
-	Ray IncomingRay;
-	Ray OutgoingRay;
-
-	vec3 HalfVec;
-	float InterfaceRefractiveIndex;
-
-	float IncomingSampleWeight;
-};
-
 struct AABB_CollisionInfo
 {
 	bool HitOccured;
@@ -118,7 +105,8 @@ void CheckRayAABB_Collision(inout AABB_CollisionInfo hitInfo,
 		(tMin < tyMax) && (tyMin < tMax) &&
 		((tMin < tMax) && (tMax > 0.0));
 
-	hitInfo.RayDis = tMin > 0.0 ? tMin : tMax;
+	hitInfo.RayDis = tMin > 0.0 ? tMin : 0.0;
+	//hitInfo.RayDis = tMin;
 }
 
 bool FindCollisionNode(inout CollisionInfo ClosestHit, in Ray ray, in uint rootIndex)
@@ -127,26 +115,6 @@ bool FindCollisionNode(inout CollisionInfo ClosestHit, in Ray ray, in uint rootI
 
 	CollisionInfo hitInfo;
 
-#if 0
-	for (uint j = sNodeBuffer.Nodes[rootIndex].BeginIndex;
-		j < sNodeBuffer.Nodes[rootIndex].EndIndex; j++)
-	{
-		CheckRayTriangleCollision(hitInfo, ray, 
-			sVertexBuffer.Positions[sIndexBuffer.Indices[j].x], 
-			sVertexBuffer.Positions[sIndexBuffer.Indices[j].y], 
-			sVertexBuffer.Positions[sIndexBuffer.Indices[j].z]);
-
-		hitInfo.PrimitiveID = j;
-
-		bool Replaced = hitInfo.HitOccured &&
-			(hitInfo.RayDis < ClosestHit.RayDis);
-
-		FoundCloser = FoundCloser || Replaced;
-
-		ClosestHit = Replaced ? hitInfo : ClosestHit;
-	}
-
-#else
 	AABB_CollisionInfo hitInfoAABB;
 
 	uint NodeStackIndices[64];
@@ -176,7 +144,7 @@ bool FindCollisionNode(inout CollisionInfo ClosestHit, in Ray ray, in uint rootI
 			{
 				CheckRayTriangleCollision(hitInfo, ray, 
 					sVertexBuffer.Positions[sIndexBuffer.Indices[j].x], 
-					sVertexBuffer.Positions[sIndexBuffer.Indices[j].y], 
+					sVertexBuffer.Positions[sIndexBuffer.Indices[j].y],
 					sVertexBuffer.Positions[sIndexBuffer.Indices[j].z]);
 
 				hitInfo.PrimitiveID = j;
@@ -190,7 +158,6 @@ bool FindCollisionNode(inout CollisionInfo ClosestHit, in Ray ray, in uint rootI
 			}
 		}
 	}
-#endif
 
 	return FoundCloser;
 }

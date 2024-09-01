@@ -19,11 +19,15 @@ void BVH_Factory::SplitRecursive(Node& parentNode, int depth)
 	parentNode.FirstChildIndex = (uint32_t) mCurrent.Nodes.size();
 	parentNode.SecondChildIndex = parentNode.FirstChildIndex + 1;
 
+	uint32_t leftBoxIndex = parentNode.FirstChildIndex;
+	uint32_t secondBoxIndex = parentNode.SecondChildIndex;
+
 	mCurrent.Nodes.emplace_back(leftChild);
 	mCurrent.Nodes.emplace_back(rightChild);
 
-	SplitRecursive(leftChild, depth - 1);
-	SplitRecursive(rightChild, depth - 1);
+	// Split the left and right box recursively
+	SplitRecursive(mCurrent.Nodes[leftBoxIndex], depth - 1);
+	SplitRecursive(mCurrent.Nodes[secondBoxIndex], depth - 1);
 }
 
 void BVH_Factory::EncloseIntoBoundingBox(Node& node)
@@ -131,11 +135,15 @@ std::pair<Node, Node> BVH_Factory::MakeChildNodes(const Node& parentNode, const 
 	Node leftChild, rightChild;
 	leftChild.BeginIndex = parentNode.BeginIndex;
 	leftChild.EndIndex = LeftIndex;
+	leftChild.FirstChildIndex = 0;
+	leftChild.SecondChildIndex = 0;
 	leftChild.MinBound = leftBox.Min;
 	leftChild.MaxBound = leftBox.Max;
 
 	rightChild.BeginIndex = LeftIndex;
 	rightChild.EndIndex = parentNode.EndIndex;
+	rightChild.FirstChildIndex = 0;
+	rightChild.SecondChildIndex = 0;
 	rightChild.MinBound = rightBox.Min;
 	rightChild.MaxBound = rightBox.Max;
 

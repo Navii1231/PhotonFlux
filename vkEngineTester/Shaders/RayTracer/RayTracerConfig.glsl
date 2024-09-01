@@ -1,14 +1,17 @@
 #ifndef RAY_TRACER_CONFIG_GLSL
 #define RAY_TRACER_CONFIG_GLSL
 
-#define _DEBUG  0
-
 // Note: Set 1 is reserved for the estimator!
 
 struct Ray
 {
 	vec3 Origin;
 	vec3 Direction;
+};
+
+struct Wavefront
+{
+	Ray Wave[WAVEFRONT_RAY_COUNT];
 };
 
 struct Material
@@ -101,12 +104,14 @@ layout (std140, set = 1, binding = 6) uniform SceneInfo
 
 	uint MeshCount;
 	uint LightCount;
+	uint MinBounceLimit;
 	uint MaxBounceLimit;
 	uint PixelSamples;
 
 	uint RandomSeed;
 	uint ResetImage;
 	uint FrameCount;
+	uint MaxSamples;
 } uSceneInfo;
 
 layout (set = 1, binding = 7) uniform sampler2D uCubeMap;

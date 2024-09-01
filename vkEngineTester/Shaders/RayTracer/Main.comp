@@ -65,8 +65,8 @@ void main()
 
 	if(uSceneInfo.FrameCount > 100)
 	{
-		// TODO: If something like 10 consecutive frames have the mean difference
-		// values less than some threshold value, then we terminate...
+		// TODO: If something like 10 consecutive frames have their mean differences
+		// less than some threshold value, then we terminate...
 
 		vec3 PercentageChange = (Color - ExistingColor) / ExistingColor;
 
@@ -79,6 +79,9 @@ void main()
 	{
 		uCPU_Feedback.Finished = 0;
 	}
+
+	if(uSceneInfo.FrameCount * uSceneInfo.PixelSamples > uSceneInfo.MaxSamples)
+		uCPU_Feedback.Finished = 1;
 
 	imageStore(ColorSum, ivec2(Position), vec4(Color, 1.0));
 	imageStore(ImageOutput, ivec2(Position + uSceneInfo.MinBound), vec4(FinalColor, 1.0));

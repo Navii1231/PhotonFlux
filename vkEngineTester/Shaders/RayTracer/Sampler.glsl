@@ -5,6 +5,18 @@
 #include "Shading.glsl"
 #include "Random.glsl"
 
+struct SampleInfo
+{
+	vec3 Direction;
+	float Throughput;
+
+	vec3 iNormal;
+	float Weight;
+
+	bool IsInvalid;
+	bool IsReflected;
+};
+
 uint sRandomGeneratorSeed;
 #define POWER_HEURISTICS_EXP      2.0
 #define SAMPLE_SIZE               3
@@ -24,9 +36,10 @@ vec2 GetTransmissionProbability(float TransmissionWeight, float Metallic,
 	float ReflectionProb = length(ReflectionFresnel);
 	float TransmissionProb = clamp(1.0 - ReflectionProb, 0.0, 1.0) * TransmissionWeight * (1.0 - Metallic);
 
-	TransmissionProb = length(RefractionDir) == 0.0 ? 0.0 : TransmissionProb;
-
 	//TransmissionProb = TransmissionWeight;
+	//TransmissionProb = 0.0;
+
+	TransmissionProb = length(RefractionDir) == 0.0 ? 0.0 : TransmissionProb;
 
 	return vec2(1.0 - TransmissionProb, TransmissionProb);
 }
@@ -70,32 +83,44 @@ ivec2 GetSampleIndex(in vec3 SampleProbablities)
 	return ivec2(SampleIndex, Hemisphere);
 }
 
-bool SampleUnitVec(inout StackEntry Entry, float RefractiveIndex)
-{	
-	vec3 Normal = Entry.HitInfo.Normal;
-	vec3 ViewDir = -Entry.OutgoingRay.Direction;
-	float Roughness = Entry.HitInfo.ObjectMaterial.Roughness;
-	float Metallic = Entry.HitInfo.ObjectMaterial.Metallic;
-	float TransmissionWeight = Entry.HitInfo.ObjectMaterial.Transmission;
+// Samples Cook Torrance BSDF
+
+void SampleUnitVec(inout SampleInfo sampleInfo, in CollisionInfo HitInfo, in vec3 IncomingDirection, float RefractiveIndex)
+{
+	// Getting necessary info and preparing...
+	vec3 Normal = HitInfo.Normal;
+	vec3 ViewDir = -IncomingDirection;
+	float Roughness = HitInfo.ObjectMaterial.Roughness;
+	float Metallic = HitInfo.ObjectMaterial.Metallic;
+	float TransmissionWeight = HitInfo.ObjectMaterial.Transmission;
 
 	float NdotV = dot(Normal, ViewDir);
+
+	float Reflectivity = (RefractiveIndex - 1.0) / (RefractiveIndex + 1.0);
+	Reflectivity = min(Reflectivity * Reflectivity, 1.0);
 
 	vec3 Directions[SAMPLE_SIZE];
 	vec3 HalfVecs[SAMPLE_SIZE];
 	float SampleWeights[SAMPLE_SIZE];
 
+	// Visible normal sampling
 	HalfVecs[0] = SampleHalfVecGGXVNDF_Distribution(ViewDir, Normal, Roughness, sRandomGeneratorSeed);
+	
+	//if (Roughness < 0.1)
+	//	HalfVecs[0] = Normal;
+
+	// Cosine weighted sampling
 	Directions[1] = SampleUnitVecCosineWeighted(Normal, sRandomGeneratorSeed);
 
 	HalfVecs[2] = HalfVecs[0];
-
 	HalfVecs[1] = normalize(ViewDir + Directions[1]);
 
 	Directions[0] = reflect(-ViewDir, HalfVecs[0]);
 	Directions[2] = refract(-ViewDir, HalfVecs[0], RefractiveIndex);
 
+	// Getting sampling probablity for each aspect of BSDF
 	vec3 SampleProbabilities = GetSampleProbablities(Roughness, Metallic, NdotV,
-		TransmissionWeight, RefractiveIndex, Directions[0]);
+		TransmissionWeight, RefractiveIndex, Directions[2]);
 
 	ivec2 SampleIndexInfo = GetSampleIndex(SampleProbabilities);
 	int SampleIndex = SampleIndexInfo[0];
@@ -104,6 +129,7 @@ bool SampleUnitVec(inout StackEntry Entry, float RefractiveIndex)
 	vec3 LightDir = normalize(Directions[SampleIndex]);
 	vec3 H = HalfVecs[SampleIndex];
 
+	// Visible normal sample weights for both BRDF and BTDF
 	float VNDF_SampleWeightReflection = PDF_GGXVNDF_Reflection(Normal, ViewDir, H, Roughness);
 	float VNDF_SampleWeightRefraction = PDF_GGXVNDF_Refraction(-Normal, ViewDir, -H,
 		LightDir, Roughness, RefractiveIndex);
@@ -114,26 +140,30 @@ bool SampleUnitVec(inout StackEntry Entry, float RefractiveIndex)
 	SampleWeights[1] = CosineSampleWeight;
 	SampleWeights[2] = VNDF_SampleWeightRefraction;
 
+	// BRDF Sampling
 	float SampleWeightInvReflection = (pow(SampleProbabilities[0] * SampleWeights[0], POWER_HEURISTICS_EXP) +
-		pow(SampleProbabilities[1] * SampleWeights[1], POWER_HEURISTICS_EXP)) / 
+		pow(SampleProbabilities[1] * SampleWeights[1], POWER_HEURISTICS_EXP)) /
 		pow(SampleProbabilities[SampleIndex] * SampleWeights[SampleIndex], POWER_HEURISTICS_EXP - 1.0);
 
-	//float SampleWeightInvReflection = (SampleProbabilities[0] * SampleWeights[0] +
-	//	SampleProbabilities[1] * SampleWeights[1]);
-
+	// BTDF Sampling
 	float SampleWeightInvRefraction = (SampleProbabilities[2] * SampleWeights[2]);
 
+	// Combining the BRDF and BTDF sampling
 	float SampleWeightInv = HemisphereSide > 0.0 ? SampleWeightInvReflection : SampleWeightInvRefraction;
 
-	Entry.HalfVec = H;
-	Entry.IncomingRay.Origin = Entry.HitInfo.IntersectionPoint +
-		HemisphereSide * TOLERENCE * Entry.HitInfo.Normal;
-	Entry.IncomingRay.Direction = LightDir;
-	Entry.IncomingSampleWeight = SampleWeightInv;
-	Entry.InterfaceRefractiveIndex = 1.0 / RefractiveIndex;
+	// Russian roulette weight
+	float NdotH = max(abs(dot(Normal, H)), SHADING_TOLERENCE);
 
-	return dot(LightDir, Normal) * HemisphereSide > 0.0;
+	float FresnelFactor = min(FresnelSchlick(NdotH, vec3(Reflectivity)).r, 1.0);
+	float GGX_Mask = min(GeometrySmith(NdotV, abs(dot(LightDir, Normal)), Roughness), 1.0);
+
+	// Accumulating all the information
+	sampleInfo.Direction = LightDir;
+	sampleInfo.Weight = 1.0 / max(SampleWeightInv, SHADING_TOLERENCE);
+	sampleInfo.iNormal = H;
+	sampleInfo.Throughput = FresnelFactor * GGX_Mask;
+	sampleInfo.IsInvalid = dot(LightDir, Normal) * HemisphereSide <= 0.0 || SampleIndex > 2;
+	sampleInfo.IsReflected = HemisphereSide > 0.0;
 }
-
 
 #endif

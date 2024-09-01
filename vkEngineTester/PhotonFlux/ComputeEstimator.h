@@ -2,6 +2,8 @@
 #include "ComputeSettings.h"
 #include "VisualizerSettings.h"
 
+#include <filesystem>
+
 PH_BEGIN
 
 // Hardware accelerated ray tracing support will be added soon
@@ -47,6 +49,10 @@ private:
 
 	// Pipeline...
 	ComputeEstimatorPipeline mEstimator;
+
+	// Pipeline Settings...
+	std::shared_ptr<ComputePipelineSettings> mSettings;
+	std::filesystem::path mShaderDirectory;
 
 	// Runtime info...
 	TraceInfo mTraceInfo;

@@ -84,12 +84,14 @@ struct SceneInfo
 
 	alignas(4) uint32_t MeshCount = 1;
 	alignas(4) uint32_t LightCount = 1;
+	alignas(4) uint32_t MinBounceLimit = 1;
 	alignas(4) uint32_t MaxBounceLimit = 1;
 	alignas(4) uint32_t PixelSamples = 1;
 
 	alignas(4) uint32_t RandomSeed = 1;
 	alignas(4) uint32_t ResetImage = 1;
 	alignas(4) uint32_t FrameCount = 1;
+	alignas(4) uint32_t MaxSamples = 4096;
 };
 
 struct CameraData

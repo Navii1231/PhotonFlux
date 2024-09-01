@@ -45,7 +45,8 @@ vec3 SampleUnitVecCosineWeighted(in vec3 Normal, inout uint state)
     float z = sqrtV;
 
     vec3 Tangent = abs(Normal.x) > abs(Normal.z) ? 
-        normalize(vec3(Normal.z, 0.0, -Normal.x)) : normalize(vec3(0.0, -Normal.z, Normal.y));
+        normalize(vec3(Normal.z, 0.0, -Normal.x)) :
+		normalize(vec3(0.0, -Normal.z, Normal.y));
 
     vec3 Bitangent = cross(Normal, Tangent);
 
@@ -61,7 +62,8 @@ vec3 SampleHalfVecGGXVNDF_Distribution(in vec3 View, in vec3 Normal, float Rough
 	float u2 = GetRandom(state);
 
     vec3 Tangent = abs(Normal.x) > abs(Normal.z) ? 
-        normalize(vec3(Normal.z, 0.0, -Normal.x)) : normalize(vec3(0.0, -Normal.z, Normal.y));
+        normalize(vec3(Normal.z, 0.0, -Normal.x)) :
+		normalize(vec3(0.0, -Normal.z, Normal.y));
 
 	vec3 Bitangent = cross(Normal, Tangent);
 

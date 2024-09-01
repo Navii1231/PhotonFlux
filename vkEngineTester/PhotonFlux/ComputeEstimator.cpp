@@ -1,7 +1,7 @@
 #include "ComputeEstimator.h"
 
 PH_FLUX_NAMESPACE::ComputeEstimator::ComputeEstimator(const EstimatorCreateInfo& createInfo)
-	: mDevice(createInfo.Context)
+	: mDevice(createInfo.Context), mShaderDirectory(createInfo.ShaderDirectory)
 {
 	mPresentableSize = createInfo.TargetResolution;
 	mTileSize = createInfo.TileSize;
@@ -9,17 +9,9 @@ PH_FLUX_NAMESPACE::ComputeEstimator::ComputeEstimator(const EstimatorCreateInfo&
 	mPipelineBuilder = mDevice.MakePipelineBuilder();
 	mMemoryManager = mDevice.MakeMemoryResourceManager();
 
+	mSettings = std::make_shared<ComputePipelineSettings>(mMemoryManager);
+
 	GenerateTiles(createInfo.TileSize);
-
-	ComputePipelineSettings settings(mMemoryManager);
-
-	vkEngine::ShaderInput input;
-	input.FilePath = createInfo.ShaderDirectory + "/main.comp";
-	input.Stage = vk::ShaderStageFlagBits::eCompute;
-
-	auto erros = settings.CompileShaders({ input });
-
-	CheckErrors(erros);
 
 	vkEngine::ImageCreateInfo imageInfo{};
 	imageInfo.Extent = vk::Extent3D(mPresentableSize.x, mPresentableSize.y, 1);
@@ -33,43 +25,63 @@ PH_FLUX_NAMESPACE::ComputeEstimator::ComputeEstimator(const EstimatorCreateInfo&
 	imageInfo.Format = vk::Format::eR8G8B8A8Unorm;
 	mCameraView = mMemoryManager.CreateImage(imageInfo);
 
-	settings.mTarget.Presentable = mPresentable;
-	settings.mTarget.ImageResolution = mPresentableSize;
+	mSettings->mTarget.Presentable = mPresentable;
+	mSettings->mTarget.ImageResolution = mPresentableSize;
 
 	mPresentable.TransitionLayout(vk::ImageLayout::eGeneral, 
 		vk::PipelineStageFlagBits::eComputeShader);
 
 	mCameraView.TransitionLayout(vk::ImageLayout::eGeneral,
 		vk::PipelineStageFlagBits::eComputeShader);
-
-	mEstimator = mPipelineBuilder.BuildComputePipeline(settings);
 }
 
 void PH_FLUX_NAMESPACE::ComputeEstimator::Begin(const TraceInfo& beginInfo)
 {
 	mTraceInfo = beginInfo;
 
-	auto& settings = mEstimator.GetConfigSettings();
+	mSettings->mCameraData.mCamera = beginInfo.CameraInfo;
 
-	settings.mCameraData.mCamera = beginInfo.CameraInfo;
-
-	settings.mSceneData.FrameCount = 1;
-	settings.mSceneData.MaxBounceLimit = beginInfo.MaxBounceLimit;
-	settings.mSceneData.PixelSamples = beginInfo.PixelSamplesPerBatch;
-	settings.mSceneData.ResetImage = 1;
-	settings.mSceneData.RandomSeed = rand();
+	mSettings->mSceneData.FrameCount = 1;
+	mSettings->mSceneData.MinBounceLimit = beginInfo.MinBounceLimit;
+	mSettings->mSceneData.MaxBounceLimit = beginInfo.MaxBounceLimit;
+	mSettings->mSceneData.PixelSamples = beginInfo.PixelSamplesPerBatch;
+	mSettings->mSceneData.ResetImage = 1;
+	mSettings->mSceneData.RandomSeed = rand();
+	mSettings->mSceneData.MaxSamples = beginInfo.MaxSamples;
 }
 
 void PH_FLUX_NAMESPACE::ComputeEstimator::SubmitRenderable(
 	const MeshData& data, const Material& material, RenderableType type)
 {
-	auto& settings = mEstimator.GetConfigSettings();
-	settings.SubmitRenderable(data, material, type, mTraceInfo.BVH_Depth);
+	mSettings->SubmitRenderable(data, material, type, mTraceInfo.BVH_Depth);
 }
 
 void PH_FLUX_NAMESPACE::ComputeEstimator::End()
 {
 	// TODO: Validate the path tracer configuration and the scene
+
+	// Reset the transmission weight to zero for objects containing holes
+	// Check if the camera is inside an object and initialize the refractive index stack
+
+	auto directory = mShaderDirectory;
+	directory.append("main.comp");
+
+	vkEngine::ShaderInput input;
+	input.FilePath = directory.string();
+	input.Stage = vk::ShaderStageFlagBits::eCompute;
+	input.OptimizationFlag = vkEngine::OptimizerFlag::eO3;
+
+	std::string StackSize = std::to_string(mSettings->mSceneData.MaxBounceLimit + 2);
+
+	mSettings->AddMacro("STACK_SIZE", StackSize);
+	mSettings->AddMacro("_DEBUG", "0");
+	mSettings->AddMacro("WAVEFRONT_RAY_COUNT", "16");
+
+	auto errors = mSettings->CompileShaders({ input });
+
+	CheckErrors(errors);
+
+	mEstimator = mPipelineBuilder.BuildComputePipeline(*mSettings);
 }
 
 PH_FLUX_NAMESPACE::TraceResult PH_FLUX_NAMESPACE::ComputeEstimator::Trace(vk::CommandBuffer buffer)

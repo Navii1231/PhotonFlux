@@ -25,7 +25,7 @@ public:
 	EstimatorTarget mTarget;
 	vk::ImageLayout mBufferLayout = vk::ImageLayout::eGeneral;
 
-	uint32_t mResetBounceLimit = 1;
+	uint32_t mResetBounceLimit = 2;
 	uint32_t mResetSampleCount = 1;
 
 	CameraData mCameraData;
