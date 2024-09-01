@@ -141,24 +141,7 @@ VK_NAMESPACE::CompileResult VK_NAMESPACE::ShaderCompiler::Compile(ShaderInput&& 
 	if (!ParseShader(Result, EShStage))
 		return Result;
 
-	/********************* OPTIMISATIONS **************************/
-
-	// Aggressively optimize as much as we can for now
-	// TODO: Take a parameter/enum in the input to define how to optimize
-	// For example: Optimize for size or performance or not all
-
-	std::vector<uint32_t> OptimizedCode;
-
-	spvtools::Optimizer Optimizer(spv_target_env::SPV_ENV_VULKAN_1_3);
-
-	Optimizer.RegisterPerformancePasses();
-
-	bool Success = Optimizer.Run(Result.SPIR_V.ByteCode.data(), Result.SPIR_V.ByteCode.size(), &OptimizedCode);
-
-	if (Success)
-		Result.SPIR_V.ByteCode = std::move(OptimizedCode);
-
-	/**************************************************************/
+	OptimizeCode(Result, Input.OptimizationFlag);
 
 	ReflectDescriptorLayouts(Result);
 	ReflectShaderMetaData(Result);
@@ -266,6 +249,29 @@ bool VK_NAMESPACE::ShaderCompiler::GenerateSPIR_V(
 void VK_NAMESPACE::ShaderCompiler::ResetInternal(const CompilerConfig& new_in)
 {
 	// Reset all the fields...
+}
+
+void VK_NAMESPACE::ShaderCompiler::OptimizeCode(CompileResult& Result, OptimizerFlag Flag)
+{
+	/********************* OPTIMISATIONS **************************/
+	// Aggressively optimize for performance as much as we can for now
+
+	if (Flag != OptimizerFlag::eNone)
+	{
+
+		std::vector<uint32_t> OptimizedCode;
+
+		spvtools::Optimizer Optimizer(spv_target_env::SPV_ENV_VULKAN_1_3);
+
+		Optimizer.RegisterPerformancePasses();
+
+		bool Success = Optimizer.Run(Result.SPIR_V.ByteCode.data(), Result.SPIR_V.ByteCode.size(), &OptimizedCode);
+
+		if (Success)
+			Result.SPIR_V.ByteCode = std::move(OptimizedCode);
+	}
+
+	/**************************************************************/
 }
 
 glslang::TShader VK_NAMESPACE::ShaderCompiler::MakeGLSLangShader(

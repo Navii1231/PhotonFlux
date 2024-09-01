@@ -13,10 +13,18 @@ using DescSetLayoutBindingMap = std::unordered_map<uint32_t, std::vector<vk::Des
 
 enum class ErrorType
 {
-	eNone = 0,
-	ePreprocess = 1,
-	eParsing = 2,
-	eLinking = 3,
+	eNone            = 0,
+	ePreprocess      = 1,
+	eParsing         = 2,
+	eLinking         = 3,
+};
+
+enum OptimizerFlag
+{
+	eNone            = 0,
+	eO1              = 1,
+	eO2              = 2,
+	eO3              = 3,
 };
 
 struct CompileError
@@ -42,6 +50,8 @@ struct ShaderInput
 	vk::ShaderStageFlagBits Stage;
 
 	std::string FilePath;
+
+	OptimizerFlag OptimizationFlag = OptimizerFlag::eNone;
 };
 
 struct CompilerConfig

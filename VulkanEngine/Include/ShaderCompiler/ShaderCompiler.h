@@ -39,6 +39,9 @@ private:
 	void ReflectDescriptorLayouts(CompileResult& Result);
 	void ResetInternal(const CompilerConfig& in);
 
+	void OptimizeCode(CompileResult& Result, OptimizerFlag Flag);
+
+
 	glslang::TShader MakeGLSLangShader(const CompilerEnvironment& Env, EShLanguage Stage);
 	void ReflectShaderMetaData(CompileResult& Result);
 	bool ReadAndPreprocess(CompileResult& Result, const ShaderInput& Input);
