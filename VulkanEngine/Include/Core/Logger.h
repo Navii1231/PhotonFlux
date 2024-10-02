@@ -81,7 +81,11 @@ void CheckAssert(BooleanConvertible cond, const std::string& fileName, int lineN
 	if (!bool(cond))
 	{
 		std::cout << "In File: " << fileName << "\n" << "Line Number: " << lineNo << "\n" << msg << std::endl;
+#if _DEBUG
 		_CrtDbgReport(_CRT_ASSERT, fileName.c_str(), lineNo, nullptr, msg.c_str());
+#else
+		std::cin.get();
+#endif
 	}
 }
 
@@ -94,6 +98,8 @@ void CheckAssert(BooleanConvertible cond, const std::string& fileName, int lineN
 	if(!bool(cond)) _CrtDbgBreak()
 
 #else
+
+#define _VK_ASSERT(cond, msgStream)
 
 #endif
 

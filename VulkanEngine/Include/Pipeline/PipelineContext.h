@@ -114,8 +114,15 @@ void PipelineContext::SaveLayoutInfos(const CompileResult& result)
 
 void PipelineContext::SavePushConstantRanges(const CompileResult& result)
 {
-	mPushConstantSubranges = result.LayoutData.PushConstantSubrangeInfos;
-	mPushConstantRanges = result.LayoutData.PushConstantsData;
+	for (const auto& [name, range] : result.LayoutData.PushConstantSubrangeInfos)
+	{
+		mPushConstantSubranges[name] = range;
+	}
+
+	for (const auto& range : result.LayoutData.PushConstantsData)
+	{
+		mPushConstantRanges.push_back(range);
+	}
 }
 
 std::vector<ShaderSPIR_V> PipelineContext::GetShaderByteCodes() const
