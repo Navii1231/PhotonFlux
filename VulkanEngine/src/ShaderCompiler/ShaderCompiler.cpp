@@ -43,6 +43,47 @@ struct ProcessInitializer
 		return SetBindingsMap;
 	}
 
+	std::string GetShaderStageString(vk::ShaderStageFlagBits stage) const
+	{
+		switch (stage)
+		{
+			case vk::ShaderStageFlagBits::eVertex:
+				return "eVertex";
+			case vk::ShaderStageFlagBits::eTessellationControl:
+				return "eTessellationControl";
+			case vk::ShaderStageFlagBits::eTessellationEvaluation:
+				return "eTessellationEvaluation";
+			case vk::ShaderStageFlagBits::eGeometry:
+				return "eGeometry";
+			case vk::ShaderStageFlagBits::eFragment:
+				return "eFragment";
+			case vk::ShaderStageFlagBits::eCompute:
+				return "eCompute";
+			case vk::ShaderStageFlagBits::eRaygenKHR:
+				return "eRaygenKHR";
+			case vk::ShaderStageFlagBits::eAnyHitKHR:
+				return "eAnyHitKHR";
+			case vk::ShaderStageFlagBits::eClosestHitKHR:
+				return "eClosestHitKHR";
+			case vk::ShaderStageFlagBits::eMissKHR:
+				return "eMissKHR";
+			case vk::ShaderStageFlagBits::eIntersectionKHR:
+				return "eIntersectionKHR";
+			case vk::ShaderStageFlagBits::eCallableKHR:
+				return "eCallableKHR";
+			case vk::ShaderStageFlagBits::eTaskEXT:
+				return "eTaskEXT";
+			case vk::ShaderStageFlagBits::eMeshEXT:
+				return "eMeshEXT";
+			case vk::ShaderStageFlagBits::eSubpassShadingHUAWEI:
+				return "eSubpassShadingHUAWEI";
+			case vk::ShaderStageFlagBits::eClusterCullingHUAWEI:
+				return "eClusterCullingHUAWEI";
+			default:
+				return "eInvalid";
+		}
+	}
+
 	std::unordered_map<vk::ShaderStageFlagBits, EShLanguage> mVulkanToEShStage;
 	std::unordered_map<EShLanguage, vk::ShaderStageFlagBits> mEShToVulkanStage;
 
@@ -172,6 +213,15 @@ bool VK_NAMESPACE::ShaderCompiler::PreprocessShader(
 	const char* Source = ResultRef.Error.SrcCode.c_str();
 
 	TShader.setStrings(&Source, 1);
+
+	std::string Preamble;
+
+	for (const auto& [macro, define] : mEnvironment.GetMacroDefines())
+	{
+		Preamble += "#define " + macro + " " + define + "\n";
+	}
+
+	TShader.setPreamble(Preamble.c_str());
 
 	glslang::TShader::ForbidIncluder basicIncluder = glslang::TShader::ForbidIncluder();
 
@@ -436,6 +486,7 @@ void VK_NAMESPACE::ShaderCompiler::ReflectDescriptorLayouts(CompileResult& Resul
 
 	auto ShaderResources = Compiler.get_shader_resources();
 
+	// Function to handle desc sets
 	auto FillDescriptor = [&Result, &Compiler]
 	(const spirv_cross::SmallVector<spirv_cross::Resource>& Resources, vk::DescriptorType DescType)
 	{
@@ -446,7 +497,65 @@ void VK_NAMESPACE::ShaderCompiler::ReflectDescriptorLayouts(CompileResult& Resul
 			std::string name = Resource.name;
 			const auto& Type = Compiler.get_type(Resource.type_id);
 
-			Result.LayoutInfos.emplace_back(SetIndex, Binding, name, Type, DescType);
+			Result.LayoutData.DescInfos.emplace_back(SetIndex, Binding, name, Type, DescType);
+		}
+	};
+
+	// Function to handle push constant ranges
+	auto FillPushConstants = [&Result, &Compiler]()
+	{
+		// Get all active push constant buffers
+		auto push_constant_resources = Compiler.get_shader_resources().push_constant_buffers;
+
+		// Convert the stage to a string
+		std::string stage_name = sCompilerInitializer.GetShaderStageString(Result.SPIR_V.Stage);
+
+		for (const auto& push_constant : push_constant_resources)
+		{
+			// Extract the type of the push constant
+			const auto& push_constant_type = Compiler.get_type(push_constant.base_type_id);
+
+			// Get the size of the push constant block
+			size_t push_constant_size = Compiler.get_declared_struct_size(push_constant_type);
+
+			// Extract the range of active push constants within the block
+			auto ranges = Compiler.get_active_buffer_ranges(push_constant.id);
+
+			// Sort the ranges into ascending order in index
+			std::sort(ranges.begin(), ranges.end(), [](
+				const spirv_cross::BufferRange& first, const spirv_cross::BufferRange& second)
+			{
+				return first.index < second.index;
+			});
+
+			// Get push constant name (use type name as a fall back if the name is empty)
+			std::string push_constant_name = push_constant.name.empty()
+				? Compiler.get_name(push_constant.base_type_id)
+				: push_constant.name;
+
+			// Range data for creating pipeline layout
+			vk::PushConstantRange& RangeStorage = Result.LayoutData.PushConstantsData.emplace_back();
+
+			RangeStorage.offset = 0;
+			RangeStorage.size = push_constant_size;
+			RangeStorage.stageFlags = Result.SPIR_V.Stage;
+
+			// This is really just 'std::unordered_map<std::string, vk::PushConstantRange>'
+			PushConstantSubrangeInfos& Subranges = Result.LayoutData.PushConstantSubrangeInfos;
+
+			for (const auto& range : ranges)
+			{
+				vk::PushConstantRange vkRange;
+				vkRange.stageFlags = Result.SPIR_V.Stage; // Set stage flags based on the current shader stage
+				vkRange.offset = range.offset;
+				vkRange.size = range.range;
+
+				// Create a key using the stage name, push constant name (or type name), and range offset
+				std::string key = stage_name + "." + push_constant_name + ".Index_" + std::to_string(range.index);
+
+				// Store the vk::PushConstantRange in the map with the concatenated key
+				Subranges[key] = vkRange;
+			}
 		}
 	};
 
@@ -458,5 +567,9 @@ void VK_NAMESPACE::ShaderCompiler::ReflectDescriptorLayouts(CompileResult& Resul
 	FillDescriptor(ShaderResources.separate_images, vk::DescriptorType::eSampledImage);
 	FillDescriptor(ShaderResources.storage_images, vk::DescriptorType::eStorageImage);
 
-	Result.SetLayoutBindingsMap = sCompilerInitializer.GetSetBindings(Result.LayoutInfos, Result.SPIR_V.Stage);
+	// Store the push constants
+	FillPushConstants();
+
+	Result.SetLayoutBindingsMap = sCompilerInitializer.GetSetBindings(
+		Result.LayoutData.DescInfos, Result.SPIR_V.Stage);
 }

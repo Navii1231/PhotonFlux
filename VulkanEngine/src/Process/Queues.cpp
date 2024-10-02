@@ -33,8 +33,8 @@ bool VK_NAMESPACE::VK_CORE::Queue::Submit(const vk::SubmitInfo& submitInfo,
 	return true;
 }
 
-bool VK_NAMESPACE::VK_CORE::Queue::Submit(vk::Semaphore signalSemaphore, vk::CommandBuffer buffer, 
-	std::chrono::nanoseconds timeOut /*= std::chrono::nanoseconds::max()*/)
+bool VK_NAMESPACE::VK_CORE::Queue::Submit(vk::Semaphore signalSemaphore,
+	vk::CommandBuffer buffer, std::chrono::nanoseconds timeOut /*= std::chrono::nanoseconds::max()*/)
 {
 	vk::SubmitInfo submitInfo{};
 	submitInfo.setCommandBuffers(buffer);
@@ -43,7 +43,22 @@ bool VK_NAMESPACE::VK_CORE::Queue::Submit(vk::Semaphore signalSemaphore, vk::Com
 	return Submit(submitInfo, timeOut);
 }
 
-bool VK_NAMESPACE::VK_CORE::Queue::Submit(vk::CommandBuffer buffer, 
+bool VK_NAMESPACE::VK_CORE::Queue::Submit(const QueueWaitingPoint& waitPoint,
+	vk::Semaphore signalSemaphore, vk::CommandBuffer buffer,
+	std::chrono::nanoseconds timeOut /*= std::chrono::nanoseconds::max()*/)
+{
+	vk::PipelineStageFlags WaitStages = { waitPoint.WaitDst };
+
+	vk::SubmitInfo submitInfo{};
+	submitInfo.setCommandBuffers(buffer);
+	submitInfo.setWaitDstStageMask(WaitStages);
+	submitInfo.setWaitSemaphores(waitPoint.WaitSemaphore);
+	submitInfo.setSignalSemaphores(signalSemaphore);
+
+	return Submit(submitInfo, timeOut);
+}
+
+bool VK_NAMESPACE::VK_CORE::Queue::Submit(vk::CommandBuffer buffer,
 	std::chrono::nanoseconds timeOut /*= std::chrono::nanoseconds::max()*/) const
 {
 	vk::SubmitInfo submitInfo{};

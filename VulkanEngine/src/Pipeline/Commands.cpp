@@ -73,7 +73,7 @@ void VK_NAMESPACE::CommandBufferAllocator::RemoveInstanceDebug(vk::CommandBuffer
 	auto found = mAllocatedInstances->find(CmdBuffer);
 	_STL_ASSERT(found != mAllocatedInstances->end(), "Trying to free an instance of 'vk::CommandBuffer' from "
 	"an allocator (a 'vkEngine::CommandBufferAllocator' instance) that did not create the buffer\n"
-	"You must free the buffer from where it was created from");
+	"You must free the buffer from where it was created");
 	mAllocatedInstances->erase(CmdBuffer);
 #endif
 }
