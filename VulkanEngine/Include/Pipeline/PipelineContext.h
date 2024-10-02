@@ -12,10 +12,10 @@ enum class PipelineType
 	eRayTracing         = 4
 };
 
-class PipelineSettingsBase
+class PipelineContext
 {
 public:
-	PipelineSettingsBase(PipelineType type)
+	PipelineContext(PipelineType type)
 		: mType(type), mEnv(mConfig) {}
 
 	// User defined stuff...
@@ -35,16 +35,20 @@ public:
 	// Compile shaders and store their result
 	inline std::vector<CompileError> CompileShaders(const std::vector<ShaderInput>& ShaderSrcCode);
 
+	const PushConstantSubrangeInfos& GetPushConstantSubranges() const { return mPushConstantSubranges; }
+
 	// Non-virtual getters
 	std::pair<DescSetLayoutBindingMap, std::vector<vk::PushConstantRange>>
-		GetPipelineLayoutInfo() const { return { mPipelineSetLayoutInfo, mPushConstantRangeInfo }; }
+		GetPipelineLayoutInfo() const { return { mPipelineSetLayoutInfo, mPushConstantRanges }; }
 
 	inline std::vector<ShaderSPIR_V> GetShaderByteCodes() const;
 
 protected:
 	// The fields below is going to be set by the function CompileShaders function...
 	DescSetLayoutBindingMap mPipelineSetLayoutInfo;
-	std::vector<vk::PushConstantRange> mPushConstantRangeInfo;
+	PushConstantSubrangeInfos mPushConstantSubranges;
+	std::vector<vk::PushConstantRange> mPushConstantRanges;
+
 	std::vector<CompileResult> mCompileResults;
 
 	CompilerConfig mConfig
@@ -60,7 +64,7 @@ protected:
 
 	PipelineType mType = PipelineType::eNone;
 
-	template <typename Config>
+	template <typename Context, typename BasePipeline>
 	friend class GraphicsPipeline;
 
 	friend class Device;
@@ -75,7 +79,7 @@ private:
 		const vk::DescriptorSetLayoutBinding& second) const;
 };
 
-void PipelineSettingsBase::SaveLayoutInfos(const CompileResult& result)
+void PipelineContext::SaveLayoutInfos(const CompileResult& result)
 {
 	for (const auto& [SetIndex, Bindings] : result.SetLayoutBindingsMap)
 	{
@@ -108,16 +112,13 @@ void PipelineSettingsBase::SaveLayoutInfos(const CompileResult& result)
 	}
 }
 
-void PipelineSettingsBase::SavePushConstantRanges(const CompileResult& result)
+void PipelineContext::SavePushConstantRanges(const CompileResult& result)
 {
-	mPushConstantRangeInfo.reserve(mPushConstantRangeInfo.size() + result.PushConstantRanges.size());
-
-	for (const auto& PushRange : result.PushConstantRanges)
-		mPushConstantRangeInfo.emplace_back(PushRange);
+	mPushConstantSubranges = result.LayoutData.PushConstantSubrangeInfos;
+	mPushConstantRanges = result.LayoutData.PushConstantsData;
 }
 
-
-std::vector<ShaderSPIR_V> PipelineSettingsBase::GetShaderByteCodes() const
+std::vector<ShaderSPIR_V> PipelineContext::GetShaderByteCodes() const
 {
 	std::vector<ShaderSPIR_V> byteCodes;
 
@@ -127,19 +128,20 @@ std::vector<ShaderSPIR_V> PipelineSettingsBase::GetShaderByteCodes() const
 	return byteCodes;
 }
 
-inline void PipelineSettingsBase::SaveShaderMetaData(CompileResult Result)
+inline void PipelineContext::SaveShaderMetaData(CompileResult Result)
 {
 	if (Result.MetaData.ShaderType == vk::ShaderStageFlagBits::eCompute)
 		mWorkGroupSize = Result.MetaData.WorkGroupSize;
 }
 
-std::vector<CompileError> PipelineSettingsBase::CompileShaders(
+std::vector<CompileError> PipelineContext::CompileShaders(
 	const std::vector<ShaderInput>& ShaderSrcCode)
 {
 	ShaderCompiler compiler(mEnv);
 
 	mPipelineSetLayoutInfo.clear();
-	mPushConstantRangeInfo.clear();
+	mPushConstantSubranges.clear();
+	mPushConstantRanges.clear();
 
 	mCompileResults.clear();
 	mCompileResults.reserve(ShaderSrcCode.size());
@@ -163,7 +165,7 @@ std::vector<CompileError> PipelineSettingsBase::CompileShaders(
 	return Errors;
 }
 
-bool PipelineSettingsBase::CheckIfSameBindings(const vk::DescriptorSetLayoutBinding& first, 
+bool PipelineContext::CheckIfSameBindings(const vk::DescriptorSetLayoutBinding& first, 
 	const vk::DescriptorSetLayoutBinding& second) const
 {
 	return first.binding == second.binding && 

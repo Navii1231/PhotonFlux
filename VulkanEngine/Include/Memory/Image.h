@@ -47,7 +47,7 @@ private:
 		: mChunk(chunk) {}
 
 	friend class MemoryResourceManager;
-	friend class RenderContext;
+	friend class RenderTargetContext;
 	friend class Framebuffer;
 
 	friend class Swapchain;

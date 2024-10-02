@@ -1,6 +1,6 @@
 #pragma once
 #include "MemoryConfig.h"
-#include "RenderContext.h"
+#include "RenderTargetContext.h"
 
 VK_BEGIN
 
@@ -9,7 +9,7 @@ class RenderContextBuilder
 public:
 	RenderContextBuilder() = default;
 
-	RenderContext MakeContext(const RenderContextCreateInfo& createInfo) const
+	RenderTargetContext MakeContext(const RenderContextCreateInfo& createInfo) const
 	{
 		std::vector<Core::ImageAttachmentConfig> configs;
 		AttachmentTypeFlags attachmentFlags = AttachmentTypeFlags();
@@ -54,7 +54,7 @@ public:
 
 		auto Device = mDevice;
 
-		RenderContext context;
+		RenderTargetContext context;
 
 		RenderContextData Data{};
 		Data.RenderPass = Handle;

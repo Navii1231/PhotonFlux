@@ -72,10 +72,10 @@ private:
 
 	// Transition internal state...
 
-	friend class RenderContext;
+	friend class RenderTargetContext;
 	friend class Swapchain;
 
-	template <typename PipelineSettingsType>
+	template <typename PipelineContextType, typename BasePipeline>
 	friend class GraphicsPipeline;
 
 	template <typename Fn>

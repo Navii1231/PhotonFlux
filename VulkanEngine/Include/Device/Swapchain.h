@@ -6,7 +6,7 @@
 #include "../Process/Commands.h"
 
 #include "../Memory/Framebuffer.h"
-#include "../Memory/RenderContext.h"
+#include "../Memory/RenderTargetContext.h"
 #include "../Memory/RenderContextBuilder.h"
 
 #include "../Memory/Image.h"
@@ -31,7 +31,7 @@ struct SwapchainData
 	CommandPoolManager CommandPoolManager;
 	CommandBufferAllocator CommandsAllocator;
 
-	RenderContext TargetContext;
+	RenderTargetContext TargetContext;
 
 	std::vector<Core::Ref<SwapchainFrame>> Frames;
 	Core::Ref<vk::Semaphore> ImageAcquired;

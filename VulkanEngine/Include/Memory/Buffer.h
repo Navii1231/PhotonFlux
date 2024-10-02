@@ -3,6 +3,10 @@
 #include "../Process/ProcessManager.h"
 #include "../Process/RecordableResource.h"
 
+#include <initializer_list>
+#include <vector>
+#include <array>
+
 VK_BEGIN
 
 template <typename T>
@@ -27,7 +31,9 @@ public:
 	T* MapMemory(size_t Count, size_t Offset = 0) const;
 	void UnmapMemory() const;
 
-	// Fix me: Isn't the most optimized routine!!
+	void InsertMemoryBarrier(vk::CommandBuffer commandBuffer, const MemoryBarrierInfo& pipelineBarrierInfo);
+
+	// TODO: Routine can optimized further
 	void TransferOwnership(uint32_t DstQueueFamilyIndex) const;
 	void TransferOwnership(vk::QueueFlagBits optimizedCaps) const;
 
@@ -56,7 +62,7 @@ private:
 	
 	template <typename V>
 	friend void CopyBufferRegions(Buffer<V>& DstBuf, const Buffer<V>& SrcBuf,
-		const vk::ArrayProxy<vk::BufferCopy>& CopyRegions);
+		const std::vector<vk::BufferCopy>& CopyRegions);
 
 private:
 	// Helper Functions...
@@ -74,44 +80,63 @@ private:
 
 template <typename T>
 void RecordCopyBufferRegions(vk::CommandBuffer buffer, Buffer<T>& DstBuf,
-	const Buffer<T>& SrcBuf, const vk::ArrayProxy<vk::BufferCopy>& CopyRegions)
+	const Buffer<T>& SrcBuf, const std::vector<vk::BufferCopy>&  CopyRegions)
 {
+	std::vector<vk::BufferCopy> CopyRegionsTemp = CopyRegions;
+
+	for (auto& Region : CopyRegionsTemp)
+	{
+		Region.srcOffset *= sizeof(T);
+		Region.dstOffset *= sizeof(T);
+		Region.size *= sizeof(T);
+	}
+
 	buffer.copyBuffer(
 		SrcBuf.GetNativeHandles().Handle,
 		DstBuf.GetNativeHandles().Handle,
-		CopyRegions);
+		CopyRegionsTemp);
 }
 
 template <typename T>
 void RecordCopyBuffer(vk::CommandBuffer buffer, Buffer<T>& DstBuf, const Buffer<T>& SrcBuf)
 {
-	size_t MinSize = std::min(DstBuf.GetDeviceSize(), SrcBuf.GetDeviceSize());
+	size_t MinSize = std::min(DstBuf.GetSize(), SrcBuf.GetSize());
 
 	vk::BufferCopy CopyRegion;
 	CopyRegion.setSrcOffset(0);
 	CopyRegion.setDstOffset(0);
 	CopyRegion.setSize(MinSize);
 
-	RecordCopyBufferRegions<T>(buffer, DstBuf, SrcBuf, CopyRegion);
+	RecordCopyBufferRegions<T>(buffer, DstBuf, SrcBuf, { CopyRegion });
 }
 
 template <typename T>
 void CopyBufferRegions(Buffer<T>& DstBuf, const Buffer<T>& SrcBuf,
-	const vk::ArrayProxy<vk::BufferCopy>& CopyRegions)
+	const std::vector<vk::BufferCopy>& CopyRegions)
 {
-	DstBuf.PerformCopyTaskGPU(*DstBuf.mChunk.BufferHandles, *SrcBuf.mChunk.BufferHandles, CopyRegions);
+	std::vector<vk::BufferCopy> CopyRegionsTemp = CopyRegions;
+
+	for (auto& Region : CopyRegionsTemp)
+	{
+		Region.srcOffset *= sizeof(T);
+		Region.dstOffset *= sizeof(T);
+		Region.size *= sizeof(T);
+	}
+
+	DstBuf.PerformCopyTaskGPU(*DstBuf.mChunk.BufferHandles, *SrcBuf.mChunk.BufferHandles,
+		{ (uint32_t) CopyRegionsTemp.size(), CopyRegionsTemp.data() });
 }
 
 template <typename T>
 void CopyBuffer(Buffer<T>& DstBuf, const Buffer<T>& SrcBuf)
 {
-	size_t MinSize = std::min(DstBuf.GetDeviceSize(), SrcBuf.GetDeviceSize());
+	size_t MinSize = std::min(DstBuf.GetSize(), SrcBuf.GetSize());
 	vk::BufferCopy CopyRegion;
 	CopyRegion.setSrcOffset(0);
 	CopyRegion.setDstOffset(0);
 	CopyRegion.setSize(MinSize);
 
-	CopyBufferRegions<T>(DstBuf, SrcBuf, CopyRegion);
+	CopyBufferRegions<T>(DstBuf, SrcBuf, std::vector<vk::BufferCopy>({ CopyRegion }) );
 }
 
 template<typename T>
@@ -149,6 +174,21 @@ void Buffer<T>::UnmapMemory() const
 	range.setSize(mChunk.BufferHandles->ElemCount);
 
 	mChunk.Device->flushMappedMemoryRanges(range);
+}
+
+template<typename T>
+void Buffer<T>::InsertMemoryBarrier(vk::CommandBuffer commandBuffer, const MemoryBarrierInfo& pipelineBarrierInfo)
+{
+	vk::BufferMemoryBarrier barrier;
+	barrier.setBuffer(mChunk.BufferHandles->Handle);
+	barrier.setSrcAccessMask(pipelineBarrierInfo.SrcAccessMasks);
+	barrier.setDstAccessMask(pipelineBarrierInfo.DstAccessMasks);
+	barrier.setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
+	barrier.setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
+	barrier.setSize(VK_WHOLE_SIZE);
+
+	commandBuffer.pipelineBarrier(pipelineBarrierInfo.SrcPipeleinStages, pipelineBarrierInfo.DstPipelineStages,
+		pipelineBarrierInfo.DependencyFlags, nullptr, barrier, nullptr);
 }
 
 template<typename T>
@@ -246,6 +286,13 @@ Buffer<T>& operator <<(Buffer<T>& vkBuf, const std::vector<T>& cpuBuf)
 	return vkBuf;
 }
 
+template <typename T>
+Buffer<T>& operator <<(Buffer<T>& vkBuf, std::initializer_list<T> cpuBuf)
+{
+	vkBuf.AppendBuf(cpuBuf.begin(), cpuBuf.end());
+	return vkBuf;
+}
+
 template <typename T, size_t Size>
 Buffer<T>& operator <<(Buffer<T>& vkBuf, const std::array<T, Size>& cpuBuf)
 {
@@ -260,6 +307,13 @@ Buffer<T>& operator >>(Buffer<T>& vkBuf, std::vector<T>& cpuBuf)
 	cpuBuf.resize(cpuBuf.size() + vkBuf.GetSize());
 
 	vkBuf.FetchMemory(cpuBuf.begin()._Unwrapped() + offset, cpuBuf.end()._Unwrapped());
+	return vkBuf;
+}
+
+template <typename T>
+Buffer<T>& operator <<(Buffer<T>& vkBuf, const T& cpuVal)
+{
+	vkBuf.AppendBuf(&cpuVal, &cpuVal + 1);
 	return vkBuf;
 }
 

@@ -55,9 +55,9 @@ private:
 		const vk::SubmitInfo* submitBegin, const vk::SubmitInfo* submitEnd) const;
 };
 
-
-template <typename Fn> uint32_t Executor::TraverseIdleQueues(
-	size_t begin, size_t end, std::chrono::nanoseconds timeOut, Fn fn) const
+template <typename Fn> 
+uint32_t Executor::TraverseIdleQueues(size_t begin, size_t end,
+	std::chrono::nanoseconds timeOut, Fn fn) const
 {
 	const auto& queueFamily = *mFamilyData;
 

@@ -41,6 +41,12 @@ struct QueueFamily
 	std::vector<Core::Ref<Queue>> Queues;
 };
 
+struct QueueWaitingPoint
+{
+	vk::Semaphore WaitSemaphore{};
+	vk::PipelineStageFlags WaitDst{};
+};
+
 struct CommandPoolData
 {
 	vk::CommandPool Handle;

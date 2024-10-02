@@ -10,6 +10,7 @@
 VK_BEGIN
 
 using DescSetLayoutBindingMap = std::unordered_map<uint32_t, std::vector<vk::DescriptorSetLayoutBinding>>;
+using PushConstantSubrangeInfos = std::unordered_map<std::string, vk::PushConstantRange>;
 
 enum class ErrorType
 {
@@ -70,6 +71,13 @@ struct DescriptorInfo
 	vk::DescriptorType DescType;
 };
 
+struct LayoutInfo
+{
+	std::vector<DescriptorInfo> DescInfos;
+	std::vector<vk::PushConstantRange> PushConstantsData;
+	PushConstantSubrangeInfos PushConstantSubrangeInfos;
+};
+
 struct ShaderMetaData
 {
 	vk::ShaderStageFlagBits ShaderType;
@@ -81,9 +89,8 @@ struct CompileResult
 	CompilerConfig Config;
 	ShaderMetaData MetaData;
 
-	std::vector<DescriptorInfo> LayoutInfos;
+	LayoutInfo LayoutData;
 	DescSetLayoutBindingMap SetLayoutBindingsMap;
-	std::vector<vk::PushConstantRange> PushConstantRanges;
 
 	CompileError Error;
 	ShaderSPIR_V SPIR_V;

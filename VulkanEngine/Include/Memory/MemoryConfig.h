@@ -52,6 +52,17 @@ struct ImageBlitInfo
 	glm::uvec2 DstEndRegion = {};
 };
 
+struct MemoryBarrierInfo
+{
+	vk::AccessFlags SrcAccessMasks = {};
+	vk::AccessFlags DstAccessMasks = {};
+
+	vk::PipelineStageFlags SrcPipeleinStages = {};
+	vk::PipelineStageFlags DstPipelineStages = {};
+
+	vk::DependencyFlags DependencyFlags = {};
+};
+
 struct ImageAttachmentInfo
 {
 	vk::Format Format = vk::Format::eR8G8B8A8Unorm;

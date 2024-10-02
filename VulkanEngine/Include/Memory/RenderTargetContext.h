@@ -4,10 +4,10 @@
 
 VK_BEGIN
 
-class RenderContext
+class RenderTargetContext
 {
 public:
-	RenderContext() = default;
+	RenderTargetContext() = default;
 
 	Framebuffer CreateFramebuffer(uint32_t width, uint32_t height) const;
 

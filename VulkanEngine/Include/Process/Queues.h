@@ -25,6 +25,9 @@ public:
 	bool Submit(vk::Semaphore signalSemaphore, vk::CommandBuffer buffer,
 		std::chrono::nanoseconds timeOut = std::chrono::nanoseconds::max());
 
+	bool Submit(const QueueWaitingPoint& waitPoint, vk::Semaphore signalSemaphore, 
+		vk::CommandBuffer buffer, std::chrono::nanoseconds timeOut = std::chrono::nanoseconds::max());
+
 	bool Submit(const vk::SubmitInfo& submitInfo,
 		std::chrono::nanoseconds timeOut = std::chrono::nanoseconds::max()) const;
 
@@ -33,7 +36,7 @@ public:
 	bool SubmitRange(const vk::SubmitInfo* Begin, const vk::SubmitInfo* End, 
 		std::chrono::nanoseconds timeOut = std::chrono::nanoseconds::max()) const;
 
-	bool BindSparse(const vk::BindSparseInfo& bindSparseInfo, 
+	bool BindSparse(const vk::BindSparseInfo& bindSparseInfo,
 		std::chrono::nanoseconds timeOut = std::chrono::nanoseconds::max()) const;
 
 	vk::Result PresentKHR(const vk::PresentInfoKHR& presentInfo) const;

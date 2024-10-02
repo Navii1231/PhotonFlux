@@ -10,7 +10,7 @@
 
 VK_BEGIN
 
-class RenderContext;
+class RenderTargetContext;
 
 enum class GraphicsPipelineState
 {
