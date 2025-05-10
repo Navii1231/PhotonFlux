@@ -94,6 +94,7 @@ struct CombinedImageSamplerWriteInfo {
 struct SampledImageWriteInfo {
 	vk::ImageView ImageView;
 	vk::ImageLayout ImageLayout;
+	vk::Sampler Sampler;
 };
 
 // Struct for sampler information

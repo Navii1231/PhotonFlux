@@ -20,15 +20,17 @@ VK_NAMESPACE::Image VK_NAMESPACE::MemoryResourceManager::CreateImage(const Image
 
 	Core::ImageChunk chunk{};
 	chunk.Device = Device;
+	chunk.ImageHandles = Handles;
 
-	chunk.ImageHandles = Core::CreateRef(Handles, [Device](const Core::Image handles)
+	Core::Ref<Core::ImageChunk> chunkRef = Core::CreateRef(chunk, 
+		[](const Core::ImageChunk handles)
 	{
-		Device->freeMemory(handles.Memory);
-		Device->destroyImage(handles.Handle);
-		Device->destroyImageView(handles.IdentityView);
+		handles.Device->freeMemory(handles.ImageHandles.Memory);
+		handles.Device->destroyImage(handles.ImageHandles.Handle);
+		handles.Device->destroyImageView(handles.ImageHandles.IdentityView);
 	});
 
-	Image image(chunk);
+	Image image(chunkRef);
 	image.mProcessHandler = mImageProcessHandler;
 
 	return image;

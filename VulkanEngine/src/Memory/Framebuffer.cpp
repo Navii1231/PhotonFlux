@@ -116,8 +116,8 @@ void VK_NAMESPACE::Framebuffer::ResetColorTransitionLayoutStatesInternal() const
 {
 	TraverseAllColorAttachments([this](const Image& image, size_t index)
 	{
-		image.mChunk.ImageHandles->Config.CurrLayout = mData->ColorAttachmentInfo.Layout;
-		image.mChunk.ImageHandles->Config.PrevStage = mData->ColorAttachmentInfo.Stages;
+		image.mChunk->ImageHandles.Config.CurrLayout = mData->ColorAttachmentInfo.Layout;
+		image.mChunk->ImageHandles.Config.PrevStage = mData->ColorAttachmentInfo.Stages;
 	});
 }
 
@@ -125,15 +125,15 @@ void VK_NAMESPACE::Framebuffer::ResetDepthStencilTransitionLayoutStatesInternal(
 {
 	TraverseAllDepthStencilAttachments([this](const Image& image, AttachmentTypeFlags)
 	{
-		image.mChunk.ImageHandles->Config.CurrLayout = mData->DepthStencilAttachmentInfo.Layout;
-		image.mChunk.ImageHandles->Config.PrevStage = mData->DepthStencilAttachmentInfo.Stages;
+		image.mChunk->ImageHandles.Config.CurrLayout = mData->DepthStencilAttachmentInfo.Layout;
+		image.mChunk->ImageHandles.Config.PrevStage = mData->DepthStencilAttachmentInfo.Stages;
 	});
 }
 
 void VK_NAMESPACE::Framebuffer::RecordTransitionImageLayoutInternal(vk::CommandBuffer commandBuffer,
 	const Image& image, vk::QueueFlags flags, vk::ImageLayout newLayout, vk::PipelineStageFlags newStages) const
 {
-	Core::ImageLayoutTransitionInfo transitionInfo{ *image.mChunk.ImageHandles };
+	Core::ImageLayoutTransitionInfo transitionInfo{ image.mChunk->ImageHandles };
 	transitionInfo.CmdBuffer = commandBuffer;
 	transitionInfo.OldLayout = mData->ColorAttachmentInfo.Layout;
 	transitionInfo.NewLayout = newLayout;

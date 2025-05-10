@@ -54,7 +54,13 @@ public:
 
 	Ref& operator =(const Ref& Other);
 
+	// Sets a new payload and deletes the existing one
+	void SetValue(const T& handle);
+
+	// Same has operator = with right hand side having the payload to be given handle
 	void ReplaceValue(const T& handle);
+
+
 	void Reset();
 	
 	MyHandle* operator->() const { return &mBlock->mHandle; }
@@ -77,6 +83,17 @@ private:
 	void TryDeleting();
 	bool TryDetaching();
 };
+
+template<typename T>
+inline void Ref<T>::SetValue(const T& handle)
+{
+	// Ref must already exist in order for this to work
+	_STL_ASSERT(mBlock, "Core::Ref must already exist for Ref::SetValue(T&&) to work!");
+
+	mBlock->DeleteObject();
+
+	mBlock->mHandle = handle;
+}
 
 template <typename T>
 void Ref<T>::ReplaceValue(const T& handle)

@@ -66,7 +66,7 @@ VK_NAMESPACE::Swapchain::Swapchain(Core::Ref<vk::Device> device, PhysicalDevice 
 		data.ColorAttachments.resize(1);
 
 		InsertImageHandle(data.ColorAttachments[0], Images[i], data.ColorAttachmentViews[0], Bundle);
-		data.ColorAttachments[0].mChunk.ImageHandles->IdentityViewInfo = viewInfo;
+		data.ColorAttachments[0].mChunk->ImageHandles.IdentityViewInfo = viewInfo;
 
 		vk::FramebufferCreateInfo framebufferInfo{};
 		framebufferInfo.setAttachments(data.ColorAttachmentViews);
@@ -130,13 +130,13 @@ void VK_NAMESPACE::Swapchain::InsertImageHandle(Image& image,
 	handles.MemReq = vk::MemoryRequirements();
 
 	auto SwapchainHandle = mHandle;
+	chunk.ImageHandles = handles;
 
-	chunk.ImageHandles = Core::CreateRef(handles, [SwapchainHandle](const Core::Image& imageHandles)
+	::new(&image) Image();
+	image.mChunk = Core::CreateRef(chunk, [SwapchainHandle](const Core::ImageChunk& imageChunk)
 	{
 		// Do nothing, resource is owned by the swapchain...
 	});
-
-	::new(&image) Image(chunk);
 
 	image.mProcessHandler = mProcessHandler;
 }

@@ -1,0 +1,15 @@
+
+--> Optimize the ray sorter
+
+--> Expand the expr parser, where you have to include
+	-- declaration nodes (done)
+	-- assignment nodes (assignment done, but comparison is still remaining)
+	-- maths and boolean expression nodes (done)
+
+ExprParser, right now, does not account for all kinds for exprs.
+You will expand the ExprParser, and the first part of the 
+parser will be finished
+
+--> Write a semantic analyser and the frontend is done!
+
+--> Needs a new sampling strategy

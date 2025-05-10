@@ -39,6 +39,7 @@ public:
 
 	void Clear() { mChunk.BufferHandles->ElemCount = 0; }
 
+	Core::BufferChunk GetBufferChunk() const { return mChunk; }
 	const Core::Buffer& GetNativeHandles() const { return *mChunk.BufferHandles; }
 	Core::BufferConfig GetBufferConfig() const { return mChunk.BufferHandles->Config; }
 
@@ -239,7 +240,7 @@ void Buffer<T>::ScaleCapacity(size_t NewSize)
 
 	auto Device = mChunk.Device;
 
-	mChunk.BufferHandles.ReplaceValue(NewBuffer);
+	mChunk.BufferHandles.SetValue(NewBuffer);
 }
 
 template<typename T>
@@ -255,7 +256,7 @@ void Buffer<T>::ScaleCapacityWithoutLoss(size_t NewSize)
 
 	auto Device = mChunk.Device;
 
-	mChunk.BufferHandles.ReplaceValue(NewBuffer);
+	mChunk.BufferHandles.SetValue(NewBuffer);
 }
 
 template<typename T>

@@ -26,11 +26,13 @@ public:
 
 	template <typename T>
 	void SetShaderConstant(const std::string& name, const T& constant);
-	
+
 	// Async Dispatch...
 	void Dispatch(const glm::uvec3& workGroups);
 
 	void End();
+
+	explicit operator bool() const { return static_cast<bool>(mPipelineHandles); }
 
 private:
 	Core::Ref<ComputePipelineHandles> mPipelineHandles;

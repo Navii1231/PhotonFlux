@@ -114,6 +114,11 @@ void PipelineContext::SaveLayoutInfos(const CompileResult& result)
 
 void PipelineContext::SavePushConstantRanges(const CompileResult& result)
 {
+	// TODO: Push constants are more complicated than that...
+	// Vulkan uses shared memory for push constants across all pipeline stages
+	// Therefore, overlapping memory regions across multiple stages must be 
+	// merged into a single one for vulkan to be able to update them
+
 	for (const auto& [name, range] : result.LayoutData.PushConstantSubrangeInfos)
 	{
 		mPushConstantSubranges[name] = range;

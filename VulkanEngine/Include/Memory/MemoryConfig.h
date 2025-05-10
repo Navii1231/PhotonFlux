@@ -17,7 +17,8 @@ struct BufferChunk
 
 struct ImageChunk
 {
-	Core::Ref<Core::Image> ImageHandles;
+	Core::Image ImageHandles;
+	Core::Ref<vk::Sampler> Sampler;
 	Core::Ref<vk::Device> Device;
 };
 
@@ -104,7 +105,7 @@ struct BasicSamplerInfo
 	bool AnisotropyEnable = true;
 	bool CompareEnable = false;
 
-	float MaxAnisotropy = FLT_MAX;
+	float MaxAnisotropy = 16.0f;
 	vk::CompareOp CompareOp = vk::CompareOp::eAlways;
 
 	float MinLod = 0.0f;

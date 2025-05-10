@@ -11,6 +11,9 @@ public:
 
 	Framebuffer CreateFramebuffer(uint32_t width, uint32_t height) const;
 
+	// TODO: Write another function which can take images from the user
+	// to form a framebuffer out of them
+
 	const RenderContextData& GetData() const { return *mData; }
 
 	AttachmentTypeFlags GetUsageAttachments() const { return mAttachmentFlags; }
@@ -32,7 +35,7 @@ private:
 private:
 	//Helper methods
 	void CreateImageAndImageViews(FramebufferData& bufferData) const;
-	Core::ImageChunk CreateImageChunk(Core::ImageConfig& config) const;
+	Core::Ref<Core::ImageChunk> CreateImageChunk(Core::ImageConfig & config) const;
 };
 
 VK_END

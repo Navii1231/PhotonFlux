@@ -190,19 +190,8 @@ VK_NAMESPACE::PipelineBuilder::BuildGraphicsPipeline(const PipelineContextType& 
 	pipeline.mPipelineSpecs = std::make_shared<BasicPipelineSpec<PipelineContextType>>(
 		context, std::move(DescWriter));
 
-	BufferCreateInfo vertexBufferInfo{};
-	vertexBufferInfo.MemProps = vk::MemoryPropertyFlagBits::eHostCoherent;
-	vertexBufferInfo.Size = 100;
-	vertexBufferInfo.Usage = vk::BufferUsageFlagBits::eVertexBuffer;
-
-	pipeline.mVertexBuffer = mMemoryManager.CreateBuffer<typename PipelineContextType::MyVertex>(vertexBufferInfo);
-
-	BufferCreateInfo indexBufferInfo{};
-	indexBufferInfo.MemProps = vk::MemoryPropertyFlagBits::eHostCoherent;
-	indexBufferInfo.Size = 100;
-	indexBufferInfo.Usage = vk::BufferUsageFlagBits::eIndexBuffer;
-
-	pipeline.mIndexBuffer = mMemoryManager.CreateBuffer<typename PipelineContextType::MyIndex>(indexBufferInfo);
+	pipeline.GetPipelineContext().CreateVertexBuffers<0>(mMemoryManager);
+	pipeline.GetPipelineContext().CreateIndexBuffer(mMemoryManager);
 
 	FreeShaderModules(pipelineStages);
 	delete[] blendState.pAttachments;
@@ -359,6 +348,7 @@ PipelineLayoutData PipelineBuilder::CreatePipelineLayout(const PipelineContextTy
 
 	for (auto& setInfo : setLayoutInfos)
 	{
+		// FIX ME: Doesn't work if the sets aren't in consecutive order...
 		Core::Ref<DescriptorResource> setResource = DescAllocator.Allocate(setInfo.second);
 		resources[setInfo.first] = setResource;
 		setLayouts[setInfo.first] = setResource->Layout;

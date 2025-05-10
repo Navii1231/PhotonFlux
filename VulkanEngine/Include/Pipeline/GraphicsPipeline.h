@@ -10,11 +10,12 @@
 
 #include "../Memory/Buffer.h"
 
+#include "../Core/Logger.h"
+
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
 
 #include <memory>
-
 #include <vector>
 
 VK_BEGIN
@@ -25,12 +26,11 @@ class GraphicsPipeline : public BasePipeline
 public:
 	using MyBasePipeline = BasePipeline;
 	using MyContext = typename MyBasePipeline::MyContext;
-	using MyVertex = typename MyContext::MyVertex;
 	using MyIndex = typename MyContext::MyIndex;
 	using MyRenderable = typename MyContext::MyRenderable;
 
-	using VertexBuffer = Buffer<MyVertex>;
-	using IndexBuffer = Buffer<MyIndex>;
+	using VertexBuffers = typename PipelineContextType::VertexBuffers;
+	using IndexBuffer = typename PipelineContextType::IndexBuffer;
 
 public:
 	GraphicsPipeline() = default;
@@ -39,19 +39,23 @@ public:
 		const vk::ArrayProxyNoTemporaries<vk::ClearValue>& clearValues);
 
 	void SubmitRenderable(const MyRenderable& renderable);
+
+	template <typename T>
+	void SetShaderConstant(const std::string& name, const T& constant);
+
 	void End();
 
-	Framebuffer GetRenderTarget() const { return ((BasePipeline*)this)->GetPipelineContext().GetFramebuffer(); }
+	Framebuffer GetRenderTarget() const { return this->GetPipelineContext().GetFramebuffer(); }
+	VertexBuffers GetVertexBuffers() const { return this->GetPipelineContext().GetVertexBuffers(); }
+	IndexBuffer GetIndexBuffer() const { return this->GetPipelineContext().GetIndexBuffer(); }
 
 private:
 	Core::Ref<GraphicsPipelineHandles> mData;
 	RenderTargetContext mTargetContext;
 
-	// Geometry memory...
-	VertexBuffer mVertexBuffer;
-	IndexBuffer mIndexBuffer;
-
 	GraphicsPipelineState mState = GraphicsPipelineState::eInitialized;
+
+	MyIndex mCurrVertexCount = 0;
 
 	friend class PipelineBuilder;
 
@@ -63,22 +67,30 @@ private:
 template <typename PipelineContextType, typename BasePipeline>
 void GraphicsPipeline<PipelineContextType, BasePipeline>::Cleanup()
 {
-	mVertexBuffer.Clear();
-	mIndexBuffer.Clear();
+	MyContext& context = this->GetPipelineContext();
+
+	context.ForEachVertexBuffer([](size_t index, auto& buffer)
+	{
+		buffer.Clear();
+	});
+
+	GetIndexBuffer().Clear();
+
+	mCurrVertexCount = MyIndex(0);
 }
 
 template <typename PipelineContextType, typename BasePipeline>
 void GraphicsPipeline<PipelineContextType, BasePipeline>::End()
 {
 	_STL_ASSERT(mState == GraphicsPipelineState::eRecording, "GraphicsPipeline::Begin has never been called! "
-		"You must begin the scope by calling GraphicsPipeline::Begin first before calling "
+		"You must begin the scope by calling GraphicsPipeline::Begin before calling "
 		"GraphicsPipeline::End!");
 
-	vk::CommandBuffer commandBuffer = ((BasePipeline*) this)->GetCommandBuffer();
+	MyContext& context = this->GetPipelineContext();
+
+	vk::CommandBuffer commandBuffer = this->GetCommandBuffer();
 
 	Framebuffer renderTarget = GetRenderTarget();
-
-	commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, mData->Handle);
 
 	if (!mData->SetCache.empty())
 	{
@@ -86,10 +98,16 @@ void GraphicsPipeline<PipelineContextType, BasePipeline>::End()
 			mData->LayoutData.Layout, 0, mData->SetCache, nullptr);
 	}
 
-	commandBuffer.bindVertexBuffers(0, mVertexBuffer.GetNativeHandles().Handle, { 0 });
-	commandBuffer.bindIndexBuffer(mIndexBuffer.GetNativeHandles().Handle, 0, vk::IndexType::eUint32);
+	//commandBuffer.bindVertexBuffers(0, mVertexBuffer.GetNativeHandles().Handle, { 0 });
 
-	commandBuffer.drawIndexed((uint32_t) mIndexBuffer.GetSize(), 1, 0, 0, 0);
+	context.ForEachVertexBuffer([commandBuffer](size_t index, auto& buffer)
+	{
+		commandBuffer.bindVertexBuffers(static_cast<uint32_t>(index), buffer.GetNativeHandles().Handle, { 0 });
+	});
+
+	commandBuffer.bindIndexBuffer(GetIndexBuffer().GetNativeHandles().Handle, 0, context.GetIndexType());
+
+	commandBuffer.drawIndexed((uint32_t) GetIndexBuffer().GetSize(), 1, 0, 0, 0);
 
 	commandBuffer.endRenderPass();
 
@@ -100,29 +118,49 @@ void GraphicsPipeline<PipelineContextType, BasePipeline>::End()
 	this->EndPipeline();
 }
 
+template<typename PipelineContextType, typename BasePipeline>
+template<typename T>
+inline void GraphicsPipeline<PipelineContextType, BasePipeline>::SetShaderConstant(
+	const std::string& name, const T& constant)
+{
+	_VK_ASSERT(this->GetPipelineState() == PipelineState::eRecording,
+		"Pipeline must be in the recording state to set a shader constant (i.e within a Begin and End scope)!");
+
+	vk::CommandBuffer commandBuffer = this->GetCommandBuffer();
+
+	MyContext& Context = this->GetPipelineContext();
+
+	const PushConstantSubrangeInfos& subranges = Context.GetPushConstantSubranges();
+
+	_VK_ASSERT(subranges.find(name) != subranges.end(),
+		"Failed to find the push constant field \"" << name << "\" in the shader source code\n"
+		"Note: If you have turned on shader optimizations (vkEngine::OptimizerFlag::eO3) "
+		"and not using the field in the shader, then the field will not appear in the reflections"
+	);
+
+	const vk::PushConstantRange range = subranges.at(name);
+
+	_VK_ASSERT(range.size == sizeof(constant),
+		"Input field size of the push constant does not match with the expected size!\n"
+		"Possible causes might be:\n"
+		"* Alignment mismatch between GPU and CPU structs\n"
+		"* Data type mismatch between shader and C++ declarations\n"
+		"* The constant has been optimized away in the shader\n"
+	);
+
+	commandBuffer.pushConstants(mData->LayoutData.Layout, range.stageFlags,
+		range.offset, range.size, reinterpret_cast<const void*>(&constant));
+}
+
 template <typename PipelineContextType, typename BasePipeline>
 void GraphicsPipeline<PipelineContextType, BasePipeline>::SubmitRenderable(const MyRenderable& renderable)
 {
-	MyContext& context = ((BasePipeline*) this)->GetPipelineContext();
+	MyContext& context = this->GetPipelineContext();
 
-	// Set up vertices and indices of the renderable...
-	size_t CurrVertexCount = mVertexBuffer.GetSize();
-	size_t CurrIndexCount = mIndexBuffer.GetSize();
+	context.CopyVertices(renderable);
+	context.CopyIndices(renderable, static_cast<MyIndex>(mCurrVertexCount));
 
-	size_t VertexCount = context.GetVertexCount(renderable);
-	size_t IndexCount = context.GetIndexCount(renderable);
-
-	mVertexBuffer.Resize(CurrVertexCount + VertexCount);
-	mIndexBuffer.Resize(CurrIndexCount + IndexCount);
-
-	MyVertex* VertexBegin = mVertexBuffer.MapMemory(VertexCount, CurrVertexCount);
-	MyIndex* IndexBegin = mIndexBuffer.MapMemory(IndexCount, CurrIndexCount);
-
-	context.CopyVertices(VertexBegin, VertexBegin + VertexCount, renderable);
-	context.CopyIndices(IndexBegin, IndexBegin + IndexCount, renderable, static_cast<MyIndex>(CurrVertexCount));
-
-	mVertexBuffer.UnmapMemory();
-	mIndexBuffer.UnmapMemory();
+	mCurrVertexCount += static_cast<MyIndex>(context.GetVertexCount(renderable));
 }
 
 template <typename PipelineContextType, typename BasePipeline>
@@ -158,6 +196,8 @@ void GraphicsPipeline<PipelineContextType, BasePipeline>::Begin(vk::CommandBuffe
 	beginRenderPass.setRenderPass(context.GetRenderContext().GetData().RenderPass);
 
 	commandBuffer.beginRenderPass(beginRenderPass, vk::SubpassContents::eInline);
+
+	commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, mData->Handle);
 }
 
 VK_END

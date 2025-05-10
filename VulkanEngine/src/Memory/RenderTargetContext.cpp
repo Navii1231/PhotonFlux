@@ -104,20 +104,19 @@ void VK_NAMESPACE::RenderTargetContext::CreateImageAndImageViews(FramebufferData
 	}
 }
 
-VK_NAMESPACE::VK_CORE::ImageChunk VK_NAMESPACE::RenderTargetContext::CreateImageChunk(Core::ImageConfig& config) const
+VK_NAMESPACE::VK_CORE::Ref<VK_NAMESPACE::VK_CORE::ImageChunk> VK_NAMESPACE::RenderTargetContext::
+	CreateImageChunk(Core::ImageConfig& config) const
 {
 	Core::ImageChunk chunk{};
 	chunk.Device = mDevice;
 
-	auto ImageHandles = Core::Utils::CreateImage(config);
+	chunk.ImageHandles = Core::Utils::CreateImage(config);
 	auto Device = mDevice;
 
-	chunk.ImageHandles = Core::CreateRef(ImageHandles, [Device](const Core::Image& handles)
+	return Core::CreateRef(chunk, [Device](const Core::ImageChunk& handles)
 	{
-		Device->freeMemory(handles.Memory);
-		Device->destroyImage(handles.Handle);
-		Device->destroyImageView(handles.IdentityView);
+		Device->freeMemory(handles.ImageHandles.Memory);
+		Device->destroyImage(handles.ImageHandles.Handle);
+		Device->destroyImageView(handles.ImageHandles.IdentityView);
 	});
-
-	return chunk;
 }

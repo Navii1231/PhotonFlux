@@ -3,13 +3,13 @@
 VK_NAMESPACE::Core::Ref<vk::ImageView> VK_NAMESPACE::Image::
 	CreateImageView(const Core::ImageViewInfo& info) const
 {
-	auto Device = mChunk.Device;
-	auto ImageHandles = mChunk.ImageHandles;
+	auto Device = mChunk->Device;
+	auto ImageHandles = mChunk->ImageHandles;
 
-	if (info == mChunk.ImageHandles->IdentityViewInfo)
-		return Core::CreateRef(mChunk.ImageHandles->IdentityView, [Device, ImageHandles](vk::ImageView) {});
+	if (info == mChunk->ImageHandles.IdentityViewInfo)
+		return Core::CreateRef(mChunk->ImageHandles.IdentityView, [Device, ImageHandles](vk::ImageView) {});
 
-	auto Handle = Core::Utils::CreateImageView(*mChunk.Device, mChunk.ImageHandles->Handle, info);
+	auto Handle = Core::Utils::CreateImageView(*mChunk->Device, mChunk->ImageHandles.Handle, info);
 
 	return Core::CreateRef(Handle, [Device, ImageHandles](vk::ImageView view)
 	{ Device->destroyImageView(view); });
@@ -17,7 +17,7 @@ VK_NAMESPACE::Core::Ref<vk::ImageView> VK_NAMESPACE::Image::
 
 void VK_NAMESPACE::Image::Blit(const Image& src, const ImageBlitInfo imageBlitInfo)
 {
-	uint32_t Owner = mChunk.ImageHandles->Config.ResourceOwner;
+	uint32_t Owner = mChunk->ImageHandles.Config.ResourceOwner;
 	auto OwnerCaps = mProcessHandler.GetQueueManager().GetFamilyCapabilities(Owner);
 
 	auto [CommandsAllocator, Executor] =
@@ -26,22 +26,22 @@ void VK_NAMESPACE::Image::Blit(const Image& src, const ImageBlitInfo imageBlitIn
 	auto CmdBuffer = CommandsAllocator.BeginOneTimeCommands();
 
 	RecordTransitionLayoutInternal(vk::ImageLayout::eTransferDstOptimal, vk::PipelineStageFlagBits::eTransfer, 
-		mChunk.ImageHandles->Config.CurrLayout, mChunk.ImageHandles->Config.PrevStage,
+		mChunk->ImageHandles.Config.CurrLayout, mChunk->ImageHandles.Config.PrevStage,
 		CmdBuffer, OwnerCaps);
 
 	src.RecordTransitionLayoutInternal(vk::ImageLayout::eTransferSrcOptimal, vk::PipelineStageFlagBits::eTransfer, 
-		src.mChunk.ImageHandles->Config.CurrLayout, src.mChunk.ImageHandles->Config.PrevStage,
+		src.mChunk->ImageHandles.Config.CurrLayout, src.mChunk->ImageHandles.Config.PrevStage,
 		CmdBuffer, OwnerCaps);
 
 	RecordBlitInternal(imageBlitInfo, vk::ImageLayout::eTransferDstOptimal,
 		src, vk::ImageLayout::eTransferSrcOptimal, CmdBuffer);
 
-	RecordTransitionLayoutInternal(mChunk.ImageHandles->Config.CurrLayout, 
-		mChunk.ImageHandles->Config.PrevStage, 
+	RecordTransitionLayoutInternal(mChunk->ImageHandles.Config.CurrLayout, 
+		mChunk->ImageHandles.Config.PrevStage, 
 		vk::ImageLayout::eTransferDstOptimal, vk::PipelineStageFlagBits::eTransfer, CmdBuffer, OwnerCaps);
 
-	src.RecordTransitionLayoutInternal(src.mChunk.ImageHandles->Config.CurrLayout, 
-		src.mChunk.ImageHandles->Config.PrevStage, 
+	src.RecordTransitionLayoutInternal(src.mChunk->ImageHandles.Config.CurrLayout, 
+		src.mChunk->ImageHandles.Config.PrevStage, 
 		vk::ImageLayout::eTransferSrcOptimal, vk::PipelineStageFlagBits::eTransfer, CmdBuffer, OwnerCaps);
 
 	CommandsAllocator.EndOneTimeCommands(CmdBuffer, Executor);
@@ -53,10 +53,10 @@ void VK_NAMESPACE::Image::TransitionLayout(
 	_STL_ASSERT(NewLayout != vk::ImageLayout::eUndefined && NewLayout != vk::ImageLayout::ePreinitialized,
 		"Can't transition image layout to Undefined or Preinitialized format!");
 
-	if (mChunk.ImageHandles->Config.CurrLayout == NewLayout)
+	if (mChunk->ImageHandles.Config.CurrLayout == NewLayout)
 		return;
 
-	uint32_t Owner = mChunk.ImageHandles->Config.ResourceOwner;
+	uint32_t Owner = mChunk->ImageHandles.Config.ResourceOwner;
 	auto [CommandsAllocator, Executor] =
 		mProcessHandler.FetchProcessHandler(Owner, QueueAccessType::eWorker);
 
@@ -65,34 +65,34 @@ void VK_NAMESPACE::Image::TransitionLayout(
 	auto CmdBuffer = CommandsAllocator.BeginOneTimeCommands();
 
 	RecordTransitionLayoutInternal(NewLayout, usageStage, 
-		mChunk.ImageHandles->Config.CurrLayout, mChunk.ImageHandles->Config.PrevStage,
+		mChunk->ImageHandles.Config.CurrLayout, mChunk->ImageHandles.Config.PrevStage,
 		CmdBuffer, QueueCaps);
 
 	CommandsAllocator.EndOneTimeCommands(CmdBuffer, Executor);
 
-	mChunk.ImageHandles->Config.CurrLayout = NewLayout;
-	mChunk.ImageHandles->Config.PrevStage = usageStage;
+	mChunk->ImageHandles.Config.CurrLayout = NewLayout;
+	mChunk->ImageHandles.Config.PrevStage = usageStage;
 
-	mChunk.ImageHandles->mRecordedLayout = { mChunk.ImageHandles->Config.CurrLayout,
-		mChunk.ImageHandles->Config.PrevStage };
+	mChunk->ImageHandles.mRecordedLayout = { mChunk->ImageHandles.Config.CurrLayout,
+		mChunk->ImageHandles.Config.PrevStage };
 }
 
 void VK_NAMESPACE::Image::BeginCommands(vk::CommandBuffer commandBuffer) const
 {
 	DefaultBegin(commandBuffer);
 
-	mChunk.ImageHandles->mRecordedLayout = { mChunk.ImageHandles->Config.CurrLayout,
-		mChunk.ImageHandles->Config.PrevStage };
+	mChunk->ImageHandles.mRecordedLayout = { mChunk->ImageHandles.Config.CurrLayout,
+		mChunk->ImageHandles.Config.PrevStage };
 }
 
 void VK_NAMESPACE::Image::RecordBlit(const Image& src, 
 	const ImageBlitInfo& blitInfo, bool restoreOriginalLayout /*= true*/) const
 {
-	auto DstLayout = mChunk.ImageHandles->mRecordedLayout;
-	auto SrcLayout = src.mChunk.ImageHandles->mRecordedLayout;
+	auto DstLayout = mChunk->ImageHandles.mRecordedLayout;
+	auto SrcLayout = src.mChunk->ImageHandles.mRecordedLayout;
 
 	auto OwnerCaps = mProcessHandler.GetQueueManager().GetFamilyCapabilities(
-		mChunk.ImageHandles->Config.ResourceOwner);
+		mChunk->ImageHandles.Config.ResourceOwner);
 
 	RecordTransitionLayout(vk::ImageLayout::eTransferDstOptimal, vk::PipelineStageFlagBits::eTransfer);
 	src.RecordTransitionLayoutInternal(
@@ -113,34 +113,34 @@ void VK_NAMESPACE::Image::RecordBlit(const Image& src,
 void VK_NAMESPACE::Image::RecordTransitionLayout(vk::ImageLayout newLayout, 
 	vk::PipelineStageFlags usageStage) const
 {
-	if (mChunk.ImageHandles->mRecordedLayout.Layout == newLayout)
+	if (mChunk->ImageHandles.mRecordedLayout.Layout == newLayout)
 		return;
 
 	auto OwnerCaps = mProcessHandler.GetQueueManager().GetFamilyCapabilities(
-		mChunk.ImageHandles->Config.ResourceOwner);
+		mChunk->ImageHandles.Config.ResourceOwner);
 
 	RecordTransitionLayoutInternal(newLayout, usageStage,
-		mChunk.ImageHandles->mRecordedLayout.Layout, mChunk.ImageHandles->mRecordedLayout.Stages,
+		mChunk->ImageHandles.mRecordedLayout.Layout, mChunk->ImageHandles.mRecordedLayout.Stages,
 		mWorkingCommandBuffer, OwnerCaps);
 
-	mChunk.ImageHandles->mRecordedLayout = { newLayout, usageStage };
+	mChunk->ImageHandles.mRecordedLayout = { newLayout, usageStage };
 }
 
 void VK_NAMESPACE::Image::EndCommands() const
 {
-	RecordTransitionLayout(mChunk.ImageHandles->Config.CurrLayout,
-		mChunk.ImageHandles->Config.PrevStage);
+	RecordTransitionLayout(mChunk->ImageHandles.Config.CurrLayout,
+		mChunk->ImageHandles.Config.PrevStage);
 
 	DefaultEnd();
 }
 
 void VK_NAMESPACE::Image::TransferOwnership(uint32_t queueFamilyIndex) const
 {
-	if (mChunk.ImageHandles->Config.ResourceOwner == queueFamilyIndex)
+	if (mChunk->ImageHandles.Config.ResourceOwner == queueFamilyIndex)
 		return;
 
-	vk::ImageLayout PrevLayout = mChunk.ImageHandles->Config.CurrLayout;
-	vk::PipelineStageFlags PrevStage = mChunk.ImageHandles->Config.PrevStage;
+	vk::ImageLayout PrevLayout = mChunk->ImageHandles.Config.CurrLayout;
+	vk::PipelineStageFlags PrevStage = mChunk->ImageHandles.Config.PrevStage;
 
 	TransitionLayout(vk::ImageLayout::eTransferDstOptimal, vk::PipelineStageFlagBits::eTopOfPipe);
 
@@ -160,7 +160,7 @@ std::vector<vk::ImageSubresourceRange> VK_NAMESPACE::Image::GetSubresourceRanges
 {
 	/* TODO: Hard coding it now, it needs to be addressed as soon as possible!!! */
 
-	vk::ImageSubresourceRange Subresource = mChunk.ImageHandles->IdentityViewInfo.Subresource;
+	vk::ImageSubresourceRange Subresource = mChunk->ImageHandles.IdentityViewInfo.Subresource;
 
 	/* ------------------------------------------------------------------------- */
 
@@ -190,7 +190,7 @@ void VK_NAMESPACE::Image::RecordTransitionLayoutInternal(vk::ImageLayout newLayo
 	if (newLayout == oldLayout)
 		return;
 
-	Core::ImageLayoutTransitionInfo transitionInfo{ *mChunk.ImageHandles };
+	Core::ImageLayoutTransitionInfo transitionInfo{ mChunk->ImageHandles };
 
 	transitionInfo.OldLayout = oldLayout;
 	transitionInfo.NewLayout = newLayout;
@@ -220,14 +220,14 @@ void VK_NAMESPACE::Image::RecordBlitInternal(const ImageBlitInfo& imageBlitInfo,
 	blitInfo.srcSubresource = src.GetSubresourceLayers().front();
 	blitInfo.dstSubresource = GetSubresourceLayers().front();
 
-	CmdBuffer.blitImage(src.mChunk.ImageHandles->Handle, srcLayout, mChunk.ImageHandles->Handle,
+	CmdBuffer.blitImage(src.mChunk->ImageHandles.Handle, srcLayout, mChunk->ImageHandles.Handle,
 		dstLayout, blitInfo, imageBlitInfo.Filter);
 }
 
 void VK_NAMESPACE::Image::PerformImageCopyTaskGPU(Core::Image& DstImage, const Core::Image& SrcImage,
 	const vk::ArrayProxy<vk::ImageCopy>& CopyRegions) const
 {
-	uint32_t Owner = mChunk.ImageHandles->Config.ResourceOwner;
+	uint32_t Owner = mChunk->ImageHandles.Config.ResourceOwner;
 	auto OwnerCaps = mProcessHandler.GetQueueManager().GetFamilyCapabilities(Owner);
 
 	auto [CommandsAllocator, Executor] =
@@ -244,7 +244,7 @@ void VK_NAMESPACE::Image::PerformImageCopyTaskGPU(Core::Image& DstImage, const C
 void VK_NAMESPACE::Image::PerformBufferToImageCopyTaskGPU(Core::Image& DstImage, 
 	const Core::Buffer& SrcBuffer, const vk::ArrayProxy<vk::BufferImageCopy>& CopyRegions) const
 {
-	uint32_t Owner = mChunk.ImageHandles->Config.ResourceOwner;
+	uint32_t Owner = mChunk->ImageHandles.Config.ResourceOwner;
 	auto OwnerCaps = mProcessHandler.GetQueueManager().GetFamilyCapabilities(Owner);
 
 	auto [CommandsAllocator, Executor] = mProcessHandler.FetchProcessHandler(Owner, QueueAccessType::eWorker);
@@ -259,18 +259,18 @@ void VK_NAMESPACE::Image::PerformBufferToImageCopyTaskGPU(Core::Image& DstImage,
 
 void VK_NAMESPACE::Image::ReleaseImage(uint32_t dstQueueFamily) const
 {
-	uint32_t Owner = mChunk.ImageHandles->Config.ResourceOwner;
+	uint32_t Owner = mChunk->ImageHandles.Config.ResourceOwner;
 	auto OwnerCaps = mProcessHandler.GetQueueManager().GetFamilyCapabilities(Owner);
 
 	auto [CommandsAllocator, Executor] = mProcessHandler.FetchProcessHandler(Owner, QueueAccessType::eWorker);
 
 	auto CmdBuffer = CommandsAllocator.BeginOneTimeCommands();
 
-	Core::ImageLayoutTransitionInfo transferInfo{*mChunk.ImageHandles};
+	Core::ImageLayoutTransitionInfo transferInfo{mChunk->ImageHandles};
 	transferInfo.CmdBuffer = CmdBuffer;
-	transferInfo.OldLayout = mChunk.ImageHandles->Config.CurrLayout;
+	transferInfo.OldLayout = mChunk->ImageHandles.Config.CurrLayout;
 
-	transferInfo.SrcStageFlags = mChunk.ImageHandles->Config.PrevStage;
+	transferInfo.SrcStageFlags = mChunk->ImageHandles.Config.PrevStage;
 	transferInfo.DstStageFlags = vk::PipelineStageFlagBits::eTransfer;
 
 	Core::Utils::FillImageReleaseMasks(transferInfo, OwnerCaps, 
@@ -284,7 +284,7 @@ void VK_NAMESPACE::Image::ReleaseImage(uint32_t dstQueueFamily) const
 
 void VK_NAMESPACE::Image::AcquireImage(uint32_t dstQueueFamily) const
 {
-	uint32_t& Owner = mChunk.ImageHandles->Config.ResourceOwner;
+	uint32_t& Owner = mChunk->ImageHandles.Config.ResourceOwner;
 	auto OwnerCaps = mProcessHandler.GetQueueManager().GetFamilyCapabilities(dstQueueFamily);
 
 	auto [CommandsAllocator, Executor] = 
@@ -292,9 +292,9 @@ void VK_NAMESPACE::Image::AcquireImage(uint32_t dstQueueFamily) const
 
 	auto CmdBuffer = CommandsAllocator.BeginOneTimeCommands();
 
-	Core::ImageLayoutTransitionInfo transferInfo{ *mChunk.ImageHandles };
+	Core::ImageLayoutTransitionInfo transferInfo{ mChunk->ImageHandles };
 	transferInfo.CmdBuffer = CmdBuffer;
-	transferInfo.NewLayout = mChunk.ImageHandles->Config.CurrLayout;
+	transferInfo.NewLayout = mChunk->ImageHandles.Config.CurrLayout;
 
 	if (transferInfo.NewLayout == vk::ImageLayout::eUndefined ||
 		transferInfo.NewLayout == vk::ImageLayout::ePreinitialized)
@@ -303,7 +303,7 @@ void VK_NAMESPACE::Image::AcquireImage(uint32_t dstQueueFamily) const
 	}
 
 	transferInfo.SrcStageFlags = vk::PipelineStageFlagBits::eTransfer;
-	transferInfo.DstStageFlags = mChunk.ImageHandles->Config.PrevStage;
+	transferInfo.DstStageFlags = mChunk->ImageHandles.Config.PrevStage;
 
 	Core::Utils::FillImageAcquireMasks(transferInfo, OwnerCaps,
 		transferInfo.NewLayout, transferInfo.DstStageFlags);
@@ -316,13 +316,13 @@ void VK_NAMESPACE::Image::AcquireImage(uint32_t dstQueueFamily) const
 
 	Owner = dstQueueFamily;
 
-	mChunk.ImageHandles->Config.CurrLayout = transferInfo.NewLayout;
-	mChunk.ImageHandles->Config.PrevStage = transferInfo.DstStageFlags;
+	mChunk->ImageHandles.Config.CurrLayout = transferInfo.NewLayout;
+	mChunk->ImageHandles.Config.PrevStage = transferInfo.DstStageFlags;
 }
 
 void VK_NAMESPACE::Image::MakeHollow()
 {
-	mChunk.ImageHandles.Reset();
+	mChunk.Reset();
 }
 
 void VK_NAMESPACE::RecordBlitImages(vk::CommandBuffer commandBuffer,
@@ -340,6 +340,6 @@ void VK_NAMESPACE::RecordBlitImages(vk::CommandBuffer commandBuffer,
 	imageBlitInfo.srcSubresource = Src.GetSubresourceLayers().front();
 	imageBlitInfo.dstSubresource = Dst.GetSubresourceLayers().front();
 
-	commandBuffer.blitImage(Src.mChunk.ImageHandles->Handle, srcLayout,
-		Dst.mChunk.ImageHandles->Handle, dstLayout, imageBlitInfo, blitInfo.Filter);
+	commandBuffer.blitImage(Src.mChunk->ImageHandles.Handle, srcLayout,
+		Dst.mChunk->ImageHandles.Handle, dstLayout, imageBlitInfo, blitInfo.Filter);
 }

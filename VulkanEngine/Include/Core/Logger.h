@@ -92,9 +92,12 @@ void CheckAssert(BooleanConvertible cond, const std::string& fileName, int lineN
 #if _DEBUG
 
 #define _VK_ASSERT(cond, msgStream)   \
-	Logger _CONCAT(logger, __LINE__)(VK_NAMESPACE::Logger::Level::eCritical); \
-	_CONCAT(logger, __LINE__) << "In function: " __FUNCTION__ << "\n\n[Critical]: " << msgStream; \
-	CheckAssert(cond, __FILE__, __LINE__, std::string(_CONCAT(logger, __LINE__))); \
+	VK_NAMESPACE::Logger _CONCAT(logger, __LINE__)(VK_NAMESPACE::Logger::Level::eCritical); \
+	if(!bool(cond))                                                                         \
+	{                                                                                       \
+		_CONCAT(logger, __LINE__) << "In function: " __FUNCTION__ << "\n\n[Critical]: " << msgStream; \
+		VK_NAMESPACE::CheckAssert(cond, __FILE__, __LINE__, std::string(_CONCAT(logger, __LINE__)));  \
+	}                                                                                       \
 	if(!bool(cond)) _CrtDbgBreak()
 
 #else

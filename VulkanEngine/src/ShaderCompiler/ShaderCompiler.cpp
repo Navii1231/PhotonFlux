@@ -537,7 +537,7 @@ void VK_NAMESPACE::ShaderCompiler::ReflectDescriptorLayouts(CompileResult& Resul
 			vk::PushConstantRange& RangeStorage = Result.LayoutData.PushConstantsData.emplace_back();
 
 			RangeStorage.offset = 0;
-			RangeStorage.size = push_constant_size;
+			RangeStorage.size = static_cast<uint32_t>(push_constant_size);
 			RangeStorage.stageFlags = Result.SPIR_V.Stage;
 
 			// This is really just 'std::unordered_map<std::string, vk::PushConstantRange>'
@@ -547,8 +547,8 @@ void VK_NAMESPACE::ShaderCompiler::ReflectDescriptorLayouts(CompileResult& Resul
 			{
 				vk::PushConstantRange vkRange;
 				vkRange.stageFlags = Result.SPIR_V.Stage; // Set stage flags based on the current shader stage
-				vkRange.offset = range.offset;
-				vkRange.size = range.range;
+				vkRange.offset = static_cast<uint32_t>(range.offset);
+				vkRange.size = static_cast<uint32_t>(range.range);
 
 				// Create a key using the stage name, push constant name (or type name), and range offset
 				std::string key = stage_name + "." + push_constant_name + ".Index_" + std::to_string(range.index);

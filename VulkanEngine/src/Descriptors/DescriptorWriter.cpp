@@ -103,12 +103,13 @@ void DescriptorWriter::Update(
 	vk::DescriptorImageInfo imageDescriptor;
 	imageDescriptor.imageView = imageInfo.ImageView;
 	imageDescriptor.imageLayout = imageInfo.ImageLayout;
+	imageDescriptor.sampler = imageInfo.Sampler;
 
 	vk::WriteDescriptorSet writeDescriptorSet;
 	writeDescriptorSet.dstSet = mDescriptorSets[info.SetIndex];
 	writeDescriptorSet.dstBinding = info.Binding;
 	writeDescriptorSet.dstArrayElement = info.ArrayIndex;
-	writeDescriptorSet.descriptorType = vk::DescriptorType::eSampledImage;
+	writeDescriptorSet.descriptorType = vk::DescriptorType::eCombinedImageSampler;
 	writeDescriptorSet.descriptorCount = 1;
 	writeDescriptorSet.pImageInfo = &imageDescriptor;
 
@@ -221,4 +222,17 @@ void DescriptorWriter::Update(
 	mDevice->updateDescriptorSets(1, &writeDescriptorSet, 0, nullptr);
 }
 
+bool operator==(const DescriptorLocation& left, const DescriptorLocation& right)
+{
+	return left.SetIndex == right.SetIndex && 
+		left.Binding == right.Binding && 
+		left.ArrayIndex == right.ArrayIndex;
+}
+
+bool operator!=(const DescriptorLocation& left, const DescriptorLocation& right)
+{
+	return !(left == right);
+}
+
 VK_END
+

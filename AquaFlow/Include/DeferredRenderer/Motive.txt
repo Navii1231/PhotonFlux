@@ -1,0 +1,3 @@
+# 'SnakeBite' -- A Deferred Renderer based on Vulkan
+# Can be integrated with a Path Tracer 'PhotonFlux'
+# Will be characterized by its flexibility, efficiency and performance

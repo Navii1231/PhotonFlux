@@ -31,19 +31,22 @@ public:
 
 	void TransferOwnership(vk::QueueFlagBits Cap) const;
 	void TransferOwnership(uint32_t queueFamilyIndex) const;
+	Core::Ref<vk::Sampler> GetSampler() const { return mChunk->Sampler; }
+
+	void SetSampler(Core::Ref<vk::Sampler> sampler) { mChunk->Sampler = sampler; }
 
 	// Only base mipmap level is supported right now!
 	std::vector<vk::ImageSubresourceRange> GetSubresourceRanges() const;
 	std::vector<vk::ImageSubresourceLayers> GetSubresourceLayers() const;
 
-	vk::ImageView GetIdentityImageView() const { return mChunk.ImageHandles->IdentityView; }
+	vk::ImageView GetIdentityImageView() const { return mChunk->ImageHandles.IdentityView; }
 
-	explicit operator bool() const { return static_cast<bool>(mChunk.ImageHandles); }
+	explicit operator bool() const { return static_cast<bool>(mChunk); }
 
 private:
-	Core::ImageChunk mChunk;
+	Core::Ref<Core::ImageChunk> mChunk;
 
-	explicit Image(const Core::ImageChunk& chunk)
+	explicit Image(const Core::Ref<Core::ImageChunk>& chunk)
 		: mChunk(chunk) {}
 
 	friend class MemoryResourceManager;
@@ -86,10 +89,10 @@ void VK_NAMESPACE::Image::CopyBufferData(const Buffer<T>& buffer)
 	CopyRegion.setBufferRowLength(0);
 
 	CopyRegion.setImageOffset({ 0, 0, 0 });
-	CopyRegion.setImageExtent(mChunk.ImageHandles->Config.Extent);
+	CopyRegion.setImageExtent(mChunk->ImageHandles.Config.Extent);
 	CopyRegion.setImageSubresource(GetSubresourceLayers().front());
 
-	PerformBufferToImageCopyTaskGPU(*mChunk.ImageHandles, buffer.GetNativeHandles(), CopyRegion);
+	PerformBufferToImageCopyTaskGPU(mChunk->ImageHandles, buffer.GetNativeHandles(), CopyRegion);
 }
 
 void RecordBlitImages(vk::CommandBuffer commandBuffer, Image& Dst,

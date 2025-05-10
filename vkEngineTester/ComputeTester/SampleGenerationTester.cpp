@@ -9,9 +9,9 @@ float GetRandom()
 	std::lock_guard locker(sStateLock);
 
 	sState *= sState * 747796405 + 2891336453;
-	uint32_t result = ((sState >> (sState >> 28) + 4) ^ sState) * 277803737;
+	uint32_t result = (((sState >> (sState >> 28)) + 4) ^ sState) * 277803737;
 	result = (result >> 22) ^ result;
-	return result / 4294967295.0;
+	return static_cast<float>(result / 4294967295.0);
 }
 
 float GetRandomCPP()
@@ -56,15 +56,15 @@ glm::vec3 SampleGenerator::GenerateCosineWeightedDistribution(const glm::vec3 No
 {
 	float u = GetRandom();
 	float v = GetRandom(); // Offset to get a different random number
-	float phi = u * 2.0 * glm::pi<float>(); // Random azimuthal angle in [0, 2*pi]
+	float phi = u * 2.0f * glm::pi<float>(); // Random azimuthal angle in [0, 2*pi]
 	float sqrtV = glm::sqrt(v);
 
 	// Convert spherical coordinates to Cartesian coordinates
 
 	glm::vec3 UnitVec;
 
-	UnitVec.x = sqrt(1.0 - v) * cos(phi);
-	UnitVec.y = sqrt(1.0 - v) * sin(phi);
+	UnitVec.x = sqrtf(1.0f - v) * cosf(phi);
+	UnitVec.y = sqrtf(1.0f - v) * sinf(phi);
 	UnitVec.z = sqrtV;
 
 	glm::vec3 Tangent = glm::abs(Normal.x) > glm::abs(Normal.z) ?
@@ -161,19 +161,19 @@ glm::vec3 SampleGenerator::GenerateLightDirDistribution(const glm::vec3& Normal,
 	float v = GetRandom();
 
 	float SinhAlpha = glm::sinh(scale * Roughness);
-	float AlphaInv = 1.0 / (scale * Roughness);
+	float AlphaInv = 1.0f / (scale * Roughness);
 
-	float phi = 2.0 * v * glm::pi<float>();
-	float cosAngle = AlphaInv * glm::asinh((2.0 * u - 1.0) * SinhAlpha);
+	float phi = 2.0f * v * glm::pi<float>();
+	float cosAngle = AlphaInv * glm::asinh((2.0f * u - 1.0f) * SinhAlpha);
 
 	// Convert spherical coordinates to Cartesian coordinates
-	float x = sqrt(1.0 - cosAngle * cosAngle) * cos(phi);
-	float y = sqrt(1.0 - cosAngle * cosAngle) * sin(phi);
+	float x = sqrtf(1.0f - cosAngle * cosAngle) * cosf(phi);
+	float y = sqrtf(1.0f - cosAngle * cosAngle) * sinf(phi);
 	float z = cosAngle;
 
 	glm::vec3 Tangent = glm::abs(LightDir.x) > glm::abs(LightDir.z) ?
-		glm::normalize(glm::vec3(LightDir.z, 0.0, -LightDir.x)) :
-		glm::normalize(glm::vec3(0.0, -LightDir.z, LightDir.y));
+		glm::normalize(glm::vec3(LightDir.z, 0.0f, -LightDir.x)) :
+		glm::normalize(glm::vec3(0.0f, -LightDir.z, LightDir.y));
 
 	glm::vec3 Bitangent = cross(LightDir, Tangent);
 
