@@ -228,7 +228,7 @@ void main()
 	if (GlobalIdx >= pRayCount)
 		return;
 
-	if (sRays[IndexOffset(GlobalIdx)].Active != 0)
+	if (sRays[IndexOffset(GlobalIdx)].Active == 0)
 		return;
 
 	// Check for collision

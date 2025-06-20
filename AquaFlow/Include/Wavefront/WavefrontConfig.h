@@ -14,6 +14,9 @@ PH_BEGIN
 #define OBJECT_FACE_ID    0
 #define LIGHT_FACE_ID     1
 
+#define OPTIMIZE_MATERIAL       1
+#define OPTIMIZE_INTERSECTION   1
+
 using RaySortRecorder = SortRecorder<uint32_t>;
 
 enum class MaterialPreprocessState
@@ -48,6 +51,7 @@ struct SessionInfo
 	GeometryBuffers LocalBuffers;
 
 	vkEngine::Buffer<PhysicalCamera> CameraSpecsBuffer;
+	vkEngine::Buffer<ShaderData> ShaderConstData;
 
 	WavefrontSceneInfo SceneData{};
 

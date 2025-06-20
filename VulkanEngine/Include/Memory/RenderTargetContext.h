@@ -4,6 +4,9 @@
 
 VK_BEGIN
 
+// NOTE: The render pass could hold multiple color attachments
+// for which we never left any space
+
 class RenderTargetContext
 {
 public:
@@ -16,7 +19,16 @@ public:
 
 	const RenderContextData& GetData() const { return *mData; }
 
-	AttachmentTypeFlags GetUsageAttachments() const { return mAttachmentFlags; }
+	uint32_t GetColorAttachmentCount() const
+	{ return static_cast<uint32_t>(mData->Info.ColorAttachments.size()); }
+
+	const std::vector<vkEngine::ImageAttachmentInfo> GetColorAttachmentInfos() const
+	{ return mData->Info.ColorAttachments; }
+
+	const vkEngine::ImageAttachmentInfo& GetDepthStencilAttachmentInfos() const
+	{ return mData->Info.DepthStencilAttachment; }
+
+	AttachmentTypeFlags GetAttachmentFlags() const { return mAttachmentFlags; }
 
 	explicit operator bool() const { return static_cast<bool>(mData); }
 

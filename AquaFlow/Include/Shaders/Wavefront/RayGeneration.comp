@@ -1,10 +1,21 @@
 #version 440
 
+/*
+	EMPTY_MATERIAL_ID = -1, SKYBOX_MATERIAL_ID = -2, LIGHT_MATERIAL_ID = -3,
+	RR_CUTOFF_CONST = -4 (indicates that the path was terminated by russian roulette)
+
+	* Ray.Active constant represents the ray status (active or inactive)
+	*  0 --> path is active
+	* -1 --> ray hit an empty material; therefore no further sampling was done
+	* -2 --> escaped into the sky
+	* -3 --> hit a light source
+	* -4 --> path was terminated by russian roulette
+*/
+
 #include "DescSet0.glsl"
 #include "DescSet1.glsl"
 #include "Random.glsl"
 
-// TODO: Make the workgroup invocation one dimensional...
 layout(local_size_x = WORKGROUP_SIZE) in;
 
 uint sRNG_Seed;
@@ -58,8 +69,6 @@ Ray CreateCameraRay(in vec2 uv, in PhysicalCameraInfo cameraInfo)
 	ray.Origin = vec3(CameraPosition + vec4(ray.Origin, 1.0));
 	ray.Direction = transpose(mat3(pViewMatrix)) * ray.Direction;
 
-	ray.Active = 0;
-
 	return ray;
 }
 
@@ -102,7 +111,9 @@ void main()
 
 	// Init the ray buffer for the next stage
 	sRays[BufferIndex] = ray;
+	sRays[BufferIndex].Active = 0; // zero represents the active path
 
 	sRayInfos[BufferIndex].ImageCoordinate = Position;
 	sRayInfos[BufferIndex].Luminance = vec4(1.0);
+	sRayInfos[BufferIndex].Throughput = vec4(1.0);
 }

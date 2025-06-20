@@ -38,12 +38,15 @@ public:
 	void Begin(vk::CommandBuffer commandBuffer,
 		const vk::ArrayProxyNoTemporaries<vk::ClearValue>& clearValues);
 
-	void SubmitRenderable(const MyRenderable& renderable);
-
 	template <typename T>
 	void SetShaderConstant(const std::string& name, const T& constant);
 
+	void DrawIndexed(uint32_t indexOffset, uint32_t vertexOffset, uint32_t firstInstance, 
+		uint32_t instanceCount, uint32_t indexCount = std::numeric_limits<uint32_t>::max());
+
 	void End();
+
+	void SubmitRenderable(const MyRenderable& renderable);
 
 	Framebuffer GetRenderTarget() const { return this->GetPipelineContext().GetFramebuffer(); }
 	VertexBuffers GetVertexBuffers() const { return this->GetPipelineContext().GetVertexBuffers(); }
@@ -80,7 +83,8 @@ void GraphicsPipeline<PipelineContextType, BasePipeline>::Cleanup()
 }
 
 template <typename PipelineContextType, typename BasePipeline>
-void GraphicsPipeline<PipelineContextType, BasePipeline>::End()
+void GraphicsPipeline<PipelineContextType, BasePipeline>::DrawIndexed(uint32_t firstIndex, 
+	uint32_t vertexOffset, uint32_t firstInstance, uint32_t instanceCount, uint32_t indexCount)
 {
 	_STL_ASSERT(mState == GraphicsPipelineState::eRecording, "GraphicsPipeline::Begin has never been called! "
 		"You must begin the scope by calling GraphicsPipeline::Begin before calling "
@@ -98,8 +102,6 @@ void GraphicsPipeline<PipelineContextType, BasePipeline>::End()
 			mData->LayoutData.Layout, 0, mData->SetCache, nullptr);
 	}
 
-	//commandBuffer.bindVertexBuffers(0, mVertexBuffer.GetNativeHandles().Handle, { 0 });
-
 	context.ForEachVertexBuffer([commandBuffer](size_t index, auto& buffer)
 	{
 		commandBuffer.bindVertexBuffers(static_cast<uint32_t>(index), buffer.GetNativeHandles().Handle, { 0 });
@@ -107,11 +109,22 @@ void GraphicsPipeline<PipelineContextType, BasePipeline>::End()
 
 	commandBuffer.bindIndexBuffer(GetIndexBuffer().GetNativeHandles().Handle, 0, context.GetIndexType());
 
-	commandBuffer.drawIndexed((uint32_t) GetIndexBuffer().GetSize(), 1, 0, 0, 0);
+	uint32_t idxCount = indexCount == std::numeric_limits<uint32_t>::max() ?
+		(uint32_t) GetIndexBuffer().GetSize() : indexCount;
+
+	commandBuffer.drawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 
 	commandBuffer.endRenderPass();
 
 	renderTarget.EndCommands();
+}
+
+template <typename PipelineContextType, typename BasePipeline>
+void GraphicsPipeline<PipelineContextType, BasePipeline>::End()
+{
+	_STL_ASSERT(mState == GraphicsPipelineState::eRecording, "GraphicsPipeline::Begin has never been called! "
+		"You must begin the scope by calling GraphicsPipeline::Begin before calling "
+		"GraphicsPipeline::End!");
 
 	mState = GraphicsPipelineState::eExecutable;
 

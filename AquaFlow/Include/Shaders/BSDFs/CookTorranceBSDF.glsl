@@ -89,6 +89,7 @@ SampleInfo SampleCookTorranceBSDF(in CookTorranceBSDF_Input bsdfInput)
 		LightDir, Roughness, RefractiveIndex);
 
 	float CosineSampleWeight = max(abs(dot(Normal, LightDir)), SHADING_TOLERENCE) / MATH_PI;
+	CosineSampleWeight = LambertianPDF(Normal, LightDir);
 
 	SampleWeights[0] = VNDF_SampleWeightReflection;
 	SampleWeights[1] = CosineSampleWeight;
@@ -105,12 +106,6 @@ SampleInfo SampleCookTorranceBSDF(in CookTorranceBSDF_Input bsdfInput)
 	// Combining the BRDF and BTDF sampling weights
 	float SampleWeightInv = HemisphereSide > 0.0 ? SampleWeightInvReflection : SampleWeightInvRefraction;
 
-	// Calculating russian roulette weight terms from the fresnel reflection/refraction (turned off for now)
-	//float NdotH = max(abs(dot(Normal, H)), SHADING_TOLERENCE);
-	//
-	//float FresnelFactor = min(FresnelSchlick(NdotH, vec3(Reflectivity)).r, 1.0);
-	//float GGX_Mask = min(GeometrySmith(NdotV, abs(dot(LightDir, Normal)), Roughness), 1.0);
-
 	// Accumulating all the information
 	sampleInfo.Direction = LightDir;
 	sampleInfo.Weight = 1.0 / max(SampleWeightInv, SHADING_TOLERENCE);
@@ -120,13 +115,16 @@ SampleInfo SampleCookTorranceBSDF(in CookTorranceBSDF_Input bsdfInput)
 	sampleInfo.IsInvalid = dot(LightDir, bsdfInput.Normal) * HemisphereSide <= 0.0 || SampleIndex > 2;
 	sampleInfo.IsReflected = HemisphereSide > 0.0;
 
-	// ******* TODO: to calculate... **********
-	float FresnelFactor = 1.0;
-	float GGX_Mask = 1.0;
-	sampleInfo.Throughput = FresnelFactor * GGX_Mask;
+	// Calculating russian roulette weight terms from the fresnel reflection/refraction (turned off for now)
+	float NdotH = max(abs(dot(Normal, H)), SHADING_TOLERENCE);
+	float HdotV = max(abs(dot(ViewDir, H)), SHADING_TOLERENCE);
+
+	vec3 FresnelFactor = min(FresnelSchlick(HdotV, vec3(Reflectivity)), vec3(1.0));
+	float GGX_Mask = min(GeometrySmith(NdotV, abs(dot(LightDir, Normal)), Roughness), 1.0);
+
+	sampleInfo.Throughput = clamp(FresnelFactor * GGX_Mask, vec3(0.0), vec3(1.0));
 	// ****************************************
 
-	sampleInfo.Throughput = 1.0;
 
 	return sampleInfo;
 }
@@ -146,6 +144,7 @@ vec3 CookTorranceBRDF(in CookTorranceBSDF_Input bsdfInput, in SampleInfo sampleI
     float NdotH = max(dot(bsdfInput.Normal, sampleInfo.iNormal), SHADING_TOLERENCE);
     float NdotV = max(dot(bsdfInput.Normal, ViewDir), SHADING_TOLERENCE);
     float NdotL = max(dot(bsdfInput.Normal, sampleInfo.Direction), SHADING_TOLERENCE);
+	float HdotV = max(dot(sampleInfo.iNormal, ViewDir), SHADING_TOLERENCE);
 
     vec3 Reflectivity = vec3((bsdfInput.RefractiveIndex - 1.0) /
         (bsdfInput.RefractiveIndex + 1.0));

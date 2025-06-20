@@ -31,6 +31,7 @@ enum OptimizerFlag
 struct CompileError
 {
 	ErrorType Type = ErrorType::eNone;
+	vk::ShaderStageFlagBits ShaderStage;
 	std::string Info;
 	std::string DebugInfo;
 	std::string SrcCode;

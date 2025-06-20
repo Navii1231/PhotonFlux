@@ -9,7 +9,7 @@
 // Fresnel equations approximation
 vec3 FresnelSchlick(float HdotV, in vec3 Reflectivity)
 {
-    return Reflectivity + (vec3(1.0) - Reflectivity) * pow(1.0 - HdotV, 5.0);
+    return vec3(Reflectivity) + vec3(1.0 - Reflectivity) * pow(1.0 - HdotV, 5.0);
 }
 
 float GeometrySchlickGGX(float DotProduct, float Roughness)

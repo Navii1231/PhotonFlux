@@ -53,7 +53,7 @@ private:
 
 	void UpdateSceneBuffers();
 
-	BVH GetBVH(const MeshData& meshData, uint32_t bvhDepth);
+	BVH CreateBVH(const MeshData& meshData, uint32_t bvhDepth);
 
 	void CopyAllVertexAttribs(BVH& bvhStruct, const MeshData& meshData, RenderableType renderableType);
 

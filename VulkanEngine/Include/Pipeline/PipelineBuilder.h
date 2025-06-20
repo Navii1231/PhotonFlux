@@ -12,6 +12,9 @@
 
 VK_BEGIN
 
+// NOTE: This Builder only works with BasePipeline = BasicPipeline<PipelineContextType>
+// TODO: we might need to invoke a callback function at the time of pipeline creation
+
 class PipelineBuilder
 {
 public:
@@ -190,9 +193,6 @@ VK_NAMESPACE::PipelineBuilder::BuildGraphicsPipeline(const PipelineContextType& 
 	pipeline.mPipelineSpecs = std::make_shared<BasicPipelineSpec<PipelineContextType>>(
 		context, std::move(DescWriter));
 
-	pipeline.GetPipelineContext().CreateVertexBuffers<0>(mMemoryManager);
-	pipeline.GetPipelineContext().CreateIndexBuffer(mMemoryManager);
-
 	FreeShaderModules(pipelineStages);
 	delete[] blendState.pAttachments;
 
@@ -300,23 +300,34 @@ template <typename PipelineContextType>
 vk::PipelineColorBlendStateCreateInfo PipelineBuilder::GetBlendStateInfo(
 	GraphicsPipelineInfo& Info, const PipelineContextType& config) const
 {
-	vk::PipelineColorBlendAttachmentState* attachmentState =
-		new vk::PipelineColorBlendAttachmentState[1];
-	attachmentState->setAlphaBlendOp(vk::BlendOp::eAdd);
-	attachmentState->setBlendEnable(false);
-	attachmentState->setColorBlendOp(vk::BlendOp::eAdd);
-	attachmentState->setColorWriteMask(
+	// NOTE: For now, the user has no control over blending functions
+
+	uint32_t count = config.mBasicConfig.TargetContext.GetColorAttachmentCount();
+
+	vk::PipelineColorBlendAttachmentState attachmentState{};
+	attachmentState.setAlphaBlendOp(vk::BlendOp::eAdd);
+	attachmentState.setBlendEnable(false);
+	attachmentState.setColorBlendOp(vk::BlendOp::eAdd);
+	attachmentState.setColorWriteMask(
 		vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
 		vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
 
-	attachmentState->setDstAlphaBlendFactor(vk::BlendFactor::eDstAlpha);
-	attachmentState->setDstColorBlendFactor(vk::BlendFactor::eDstColor);
-	attachmentState->setSrcAlphaBlendFactor(vk::BlendFactor::eSrcAlpha);
-	attachmentState->setSrcColorBlendFactor(vk::BlendFactor::eSrcColor);
+	attachmentState.setDstAlphaBlendFactor(vk::BlendFactor::eDstAlpha);
+	attachmentState.setDstColorBlendFactor(vk::BlendFactor::eDstColor);
+	attachmentState.setSrcAlphaBlendFactor(vk::BlendFactor::eSrcAlpha);
+	attachmentState.setSrcColorBlendFactor(vk::BlendFactor::eSrcColor);
 
 	vk::PipelineColorBlendStateCreateInfo result;
-	result.setPAttachments(attachmentState);
-	result.setAttachmentCount(1);
+
+	// Setting the attachments...
+
+	vk::PipelineColorBlendAttachmentState* attachments = new vk::PipelineColorBlendAttachmentState[count];
+
+	for (uint32_t i = 0; i < count; i++)
+		attachments[i] = attachmentState;
+
+	result.setPAttachments(attachments);
+	result.setAttachmentCount(count);
 	result.setLogicOp(vk::LogicOp::eCopy);
 	result.setLogicOpEnable(false);
 	result.setBlendConstants({ 1.0f, 1.0f, 1.0f, 1.0f });

@@ -9,17 +9,16 @@ uint sRandomSeed;
 struct SampleInfo
 {
     vec3 Direction;
-    float Throughput;
-
-    vec3 iNormal;
     float Weight;
 
+    vec3 iNormal;
     vec3 SurfaceNormal;
+
+    vec3 Luminance;
+    vec3 Throughput;
 
     bool IsInvalid;
     bool IsReflected;
-
-    vec3 Luminance;
 };
 
 uint Hash(uint state)
@@ -205,7 +204,7 @@ vec2 GetSampleProbablitiesReflection(float Roughness, float Metallic, float Ndot
 
 ivec2 GetSampleIndex(in vec3 SampleProbablities)
 {
-    float SampleCoin = GetRandom(sRandomSeed);
+    float Xi = GetRandom(sRandomSeed);
 
     // Accumulate probabilities
     float p0 = SampleProbablities.x;
@@ -213,9 +212,9 @@ ivec2 GetSampleIndex(in vec3 SampleProbablities)
     float p2 = p1 + SampleProbablities.z;
 
     // Use step to determine in which region the randomValue falls and cast to int
-    int s1 = int(step(p0, SampleCoin)); // 1 if randomValue >= p0, else 0
-    int s2 = int(step(p1, SampleCoin)); // 1 if randomValue >= p1, else 0
-    int s3 = int(step(p2, SampleCoin)); // 1 if randomValue >= p1, else 0
+    int s1 = int(step(p0, Xi)); // 1 if randomValue >= p0, else 0
+    int s2 = int(step(p1, Xi)); // 1 if randomValue >= p1, else 0
+    int s3 = int(step(p2, Xi)); // 1 if randomValue >= p1, else 0
 
     // Calculate the index by summing the step results and adding 0.5 offsets
     int SampleIndex = s1 + s2 + s3;

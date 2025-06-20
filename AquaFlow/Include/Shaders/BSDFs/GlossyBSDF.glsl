@@ -61,12 +61,6 @@ SampleInfo SampleGlossyBSDF(in GlossyBSDF_Input bsdfInput)
 		pow(SampleProbabilities[1] * SampleWeights[1], POWER_HEURISTICS_EXP)) /
 		pow(SampleProbabilities[SampleIndex] * SampleWeights[SampleIndex], POWER_HEURISTICS_EXP - 1.0);
 
-	// Calculating russian roulette weight terms from the fresnel reflection/refraction (turned off for now)
-	//float NdotH = max(abs(dot(Normal, H)), SHADING_TOLERENCE);
-	//
-	//float FresnelFactor = min(FresnelSchlick(NdotH, Reflectivity).r, 1.0);
-	//float GGX_Mask = min(GeometrySmith(NdotV, abs(dot(LightDir, Normal)), Roughness), 1.0);
-
 	// Accumulating all the information
 	sampleInfo.Direction = LightDir;
 	sampleInfo.Weight = 1.0 / max(SampleWeightInvReflection, SHADING_TOLERENCE);
@@ -76,11 +70,22 @@ SampleInfo SampleGlossyBSDF(in GlossyBSDF_Input bsdfInput)
 	sampleInfo.IsInvalid = dot(LightDir, bsdfInput.Normal) <= 0.0 || SampleIndex > 1;
 	sampleInfo.IsReflected = true;
 
+	// Calculating russian roulette weight terms from the fresnel reflection/refraction (turned off for now)
+
 	// ******* TODO: to calculate... **********
-	float FresnelFactor = 1.0;
-	float GGX_Mask = 1.0;
-	sampleInfo.Throughput = FresnelFactor * GGX_Mask;
+	//float FresnelFactor = 1.0;
+	//float GGX_Mask = 1.0;
+
+	float NdotH = max(abs(dot(Normal, H)), SHADING_TOLERENCE);
+
+	vec3 FresnelFactor = min(FresnelSchlick(NdotH, vec3(Reflectivity)), 1.0);
+	float GGX_Mask = min(GeometrySmith(NdotV, abs(dot(LightDir, Normal)), Roughness), 1.0);
+
+	// prevent it from dropping too much
+	sampleInfo.Throughput = clamp(FresnelFactor * GGX_Mask, vec3(0.0), vec3(1.0));
 	// ****************************************
+
+	//sampleInfo.Throughput = vec3(1.0);
 
     return sampleInfo;
 }

@@ -8,21 +8,18 @@
 * user defined macro definitions...
 * SHADER_TOLERENCE = 0.001, POWER_HEURISTIC_EXP = 2.0,
 * EMPTY_MATERIAL_ID = -1, SKYBOX_MATERIAL_ID = -2, LIGHT_MATERIAL_ID = -3,
+* RR_CUTOFF_CONST = -4 (indicates that the path was terminated through russian roulette)
 */
 
 layout(local_size_x = WORKGROUP_SIZE) in;
 
-layout(push_constant) uniform ShaderData
+layout(push_constant) uniform ShaderConstants
 {
 	// Material and ray stuff...
 	uint pMaterialRef;
-	uint pRayCount;
 	uint pActiveBuffer;
 	uint pRandomSeed;
-
-	// Skybox stuff...
-	vec4 pSkyboxColor; // The alpha channel contains the rotation of the cube map
-	uint pSkyboxExists;
+	uint pBounceCount;
 };
 
 struct Face
@@ -35,16 +32,6 @@ struct Face
 	uint FaceID;
 	uint Padding2;
 };
-
-uint GetActiveIndex(uint index)
-{
-	return pRayCount * pActiveBuffer + index;
-}
-
-uint GetInactiveIndex(uint index)
-{
-	return pRayCount * (1 - pActiveBuffer) + index;
-}
 
 layout(std430, set = 0, binding = 0) buffer RayBuffer
 {
@@ -92,3 +79,25 @@ layout(std430, set = 0, binding = 8) readonly buffer LightPropsBuffer
 };
 
 layout(set = 0, binding = 9) uniform sampler2D uCubeMap;
+
+layout(std140, set = 1, binding = 0) uniform ShaderData
+{
+	uint uRayCount;
+	float uThroughputFloor; // minimum russian roulette probability
+
+	// Skybox stuff...
+	uint uSkyboxExists;
+	vec4 uSkyboxColor; // The alpha channel holds the rotation of the cube map
+};
+
+uint GetActiveIndex(uint index)
+{
+	//return index;
+	return uRayCount * pActiveBuffer + index;
+}
+
+uint GetInactiveIndex(uint index)
+{
+	//return uRayCount + index;
+	return uRayCount * (1 - pActiveBuffer) + index;
+}

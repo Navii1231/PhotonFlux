@@ -31,7 +31,7 @@ SampleInfo SampleRefractionBSDF(inout RefractionBSDF_Input bsdfInput)
         sampleInfo.Direction, bsdfInput.Roughness, bsdfInput.RefractiveIndex);
 
     // TODO: to calculate
-    sampleInfo.Throughput = 1.0;
+    sampleInfo.Throughput = vec3(1.0);
 
     return sampleInfo;
 }

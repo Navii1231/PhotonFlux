@@ -7,27 +7,24 @@ layout(location = 3) in vec4 iBitangent;
 layout(location = 4) in vec2 iTexCoords;
 layout(location = 5) in vec2 iMatID_MeshID; // Holds material id and mesh id
 
-layout(set = 0, binding = 1) uniform CameraInfo
+layout(set = 0, binding = 0) uniform CameraInfo
 {
 	mat4 uProjection;
 	mat4 uView;
 };
 
-layout(std430, set = 0, binding = 0) buffer
+layout(std430, set = 0, binding = 1) buffer ModelMatrices
 {
 	mat4 sModels[];
 };
 
 // Sending data to fragment shader
-out struct
-{
-	vec4 vPosition
-	vec4 vNormal
-	vec4 vTangent
-	vec4 vBitangent
-	vec2 vTexCoords
-	vec2 vMatID_MeshID
-};
+layout (location = 0) out vec4 vPosition;
+layout (location = 1) out vec4 vNormal;
+layout (location = 2) out vec4 vTangent;
+layout (location = 3) out vec4 vBitangent;
+layout (location = 4) out vec2 vTexCoords;
+layout (location = 5) out vec2 vMatID_MeshID;
 
 void main()
 {
@@ -41,6 +38,6 @@ void main()
 	vNormal = uView * iNormal;
 	vTangent = uView * iTangent;
 	vBitangent = uView * iBitangent;
-	vTexCoords = uView * iTexCoords;
-	vMatID_MeshID = uView * vMatID_MeshID;
+	vTexCoords = iTexCoords;
+	vMatID_MeshID = iMatID_MeshID;
 }

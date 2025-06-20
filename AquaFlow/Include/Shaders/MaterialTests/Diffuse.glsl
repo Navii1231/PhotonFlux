@@ -1,6 +1,6 @@
 import DiffuseBSDF
 
-layout(set = 1, binding = 0) uniform sampler2D uTexture;
+layout(set = 2, binding = 0) uniform sampler2D uTexture;
 
 SampleInfo Evaluate(in Ray ray, in CollisionInfo collisionInfo)
 {
@@ -14,10 +14,14 @@ SampleInfo Evaluate(in Ray ray, in CollisionInfo collisionInfo)
 	vec2 tex = GetTexCoords(face, collisionInfo);
 
 	diffuseInput.BaseColor = texture(uTexture, tex).rgb;
+	//diffuseInput.BaseColor = vec3(0.6);
 
 	SampleInfo sampleInfo = SampleDiffuseBSDF(diffuseInput);
 
 	sampleInfo.Luminance = DiffuseBSDF(diffuseInput, sampleInfo);
+
+	//sampleInfo.Weight = 1.0;
+	//sampleInfo.Luminance = vec3(0.6, 0.0, 0.6);
 
 	return sampleInfo;
 }

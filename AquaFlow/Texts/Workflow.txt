@@ -1,5 +1,34 @@
 
+--> Writing a generic deferred pipeline
+--> Incorporating different kinds of shading models
+--> Generating a fragment shader and a deferred pipeline 
+	corresponding to a shading model
+
+--> Writing generic material system
+	
+	" The materials often consist of uniquely named parameters
+	* tuned out and set by the artists. Thus, we need a way to 
+	* access those random parameters from the material
+	* by their names. Furthermore, a material also contains 
+	* a shader often found in terms of graph or a tree. The shader determines 
+	* how those parameters are used and what resources 
+	* are required in shading the model. In other words, 
+	* we want a material system which can translate this graph into a 
+	* parameterized shader that we can run on the GPU" -- From AquaFlow\Inlude\Geometry3D\Geometry3D.h
+	
+--> Including compute pipelines for shading stage of deferred rendering
+	which will allow us to run arbitrary materials on the GPU
+
+--> Writing a generic shader generator and that can produce both fragment and compute
+	shaders corresponding the shading model and material graph. It will also be able
+	determine information regarding resources used in the material graph, which will 
+	help us generating them as well as create the form the deferred pipeline
+
+--> Implementing GPU BVH builder
+
+
 --> Optimize the ray sorter
+
 
 --> Expand the expr parser, where you have to include
 	-- declaration nodes (done)

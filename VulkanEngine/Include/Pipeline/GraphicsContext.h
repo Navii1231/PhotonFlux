@@ -14,6 +14,8 @@ enum class GraphicsBufferTypeBits
 	eIndex     = 2,
 };
 
+// TODO: The user should be responsible for creating and managing the pipeline buffers
+
 using GraphicsBufferTypes = vk::Flags<GraphicsBufferTypeBits>;
 
 struct BasicGraphicsPipelineSettings
@@ -95,6 +97,13 @@ public:
 
 	uint32_t GetSubpassIndex() const { return mBasicConfig.SubpassIndex; }
 
+	void RecreateBuffers(const BufferCreateInfo& indexProps, 
+		const BufferCreateInfo& vertexProps, const MemoryResourceManager& memoryManager)
+	{
+		CreateVertexBuffers<0>(memoryManager);
+		CreateIndexBuffer(memoryManager);
+	}
+
 public:
 
 	template <typename Func, size_t Index = 0>
@@ -106,11 +115,11 @@ protected:
 	VertexBuffers mVertexBuffers;
 	IndexBuffer mIndexBuffer;
 
-	vk::MemoryPropertyFlags mIndexMemProperties{ 0 };
-	vk::MemoryPropertyFlags mVertexMemProperties{ 0 };
+	vkEngine::BufferCreateInfo mIndexProps
+	{ 1, vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eHostCoherent };
 
-	vk::BufferUsageFlags mIndexUsage = vk::BufferUsageFlagBits::eIndexBuffer;
-	vk::BufferUsageFlags mVertexUsage = vk::BufferUsageFlagBits::eVertexBuffer;
+	vkEngine::BufferCreateInfo mVertexProps
+	{ 1, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eHostCoherent };
 
 private:
 	template <typename PipelineContextType, typename BasePipeline>
@@ -149,10 +158,7 @@ template <typename RenderableType, typename IndexType, typename ...VertexTypes>
 inline void GraphicsPipelineContext<RenderableType, IndexType, VertexTypes...>::
 	CreateIndexBuffer(vkEngine::MemoryResourceManager manager)
 {
-	vkEngine::BufferCreateInfo indexInfo{};
-	indexInfo.MemProps = mIndexMemProperties;
-	indexInfo.Usage = mIndexUsage;
-
+	vkEngine::BufferCreateInfo indexInfo = mIndexProps;
 	mIndexBuffer = manager.CreateBuffer<MyIndex>(indexInfo);
 }
 
@@ -161,9 +167,7 @@ template <size_t Index /*= 0*/>
 inline void GraphicsPipelineContext<RenderableType, IndexType, VertexTypes...>::
 	CreateVertexBuffers(vkEngine::MemoryResourceManager manager)
 {
-	vkEngine::BufferCreateInfo vertexInfo{};
-	vertexInfo.MemProps = mVertexMemProperties;
-	vertexInfo.Usage = mVertexUsage;
+	vkEngine::BufferCreateInfo vertexInfo = mVertexProps;
 
 	// Recursive tuple iteration
 	if constexpr (Index < std::tuple_size<VertexBuffers>::value)
@@ -188,8 +192,8 @@ inline void GraphicsPipelineContext<RenderableType, IndexType, VertexTypes...>::
 			outFlags = flags | bufferFlag;
 	};
 
-	SetFlags(GraphicsBufferTypeBits::eIndex, mIndexUsage, vk::BufferUsageFlagBits::eIndexBuffer);
-	SetFlags(GraphicsBufferTypeBits::eVertex, mVertexUsage, vk::BufferUsageFlagBits::eVertexBuffer);
+	SetFlags(GraphicsBufferTypeBits::eIndex, mIndexProps.Usage, vk::BufferUsageFlagBits::eIndexBuffer);
+	SetFlags(GraphicsBufferTypeBits::eVertex, mVertexProps.Usage, vk::BufferUsageFlagBits::eVertexBuffer);
 }
 
 template<typename RenderableType, typename IndexType, typename ...VertexTypes>
@@ -202,8 +206,8 @@ inline void GraphicsPipelineContext<RenderableType, IndexType, VertexTypes...>::
 			outFlags = flags;
 	};
 
-	SetFlags(GraphicsBufferTypeBits::eIndex, mIndexMemProperties);
-	SetFlags(GraphicsBufferTypeBits::eVertex, mVertexMemProperties);
+	SetFlags(GraphicsBufferTypeBits::eIndex, mIndexProps.MemProps);
+	SetFlags(GraphicsBufferTypeBits::eVertex, mVertexProps.MemProps);
 }
 
 VK_END

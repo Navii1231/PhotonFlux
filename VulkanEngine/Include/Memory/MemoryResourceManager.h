@@ -13,6 +13,8 @@ public:
 	template <typename T>
 	Buffer<T> CreateBuffer(const BufferCreateInfo& Input) const;
 
+	GenericBuffer CreateGenericBuffer(const BufferCreateInfo& input) const;
+
 	Image CreateImage(const ImageCreateInfo& info) const;
 
 	Core::Ref<vk::Sampler> CreateSampler(const SamplerInfo& samplerInfo, SamplerCache cache = {}) const;

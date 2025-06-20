@@ -26,6 +26,8 @@ public:
 	static vk::ShaderStageFlagBits ConvertShaderStage(EShLanguage Stage);
 	static EShLanguage ConvertShaderStage(vk::ShaderStageFlagBits Stage);
 
+	static std::string GetShaderStageString(vk::ShaderStageFlagBits flag);
+
 private:
 	// Output/Input fields...
 	CompilerEnvironment mEnvironment;

@@ -6,13 +6,14 @@ struct Ray
 	vec3 Origin;
 	uint MaterialIndex;
 	vec3 Direction;
-	uint Active;
+	uint Active; // Zero means active; any other means inactive
 };
 
 struct RayInfo
 {
 	uvec2 ImageCoordinate;
 	vec4 Luminance;
+	vec4 Throughput;
 };
 
 struct Material

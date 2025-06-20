@@ -101,12 +101,6 @@ SampleInfo SampleGlassBSDF(in GlassBSDF_Input bsdfInput)
 	// Combining the BRDF and BTDF sampling weights
 	float SampleWeightInv = HemisphereSide > 0.0 ? SampleWeightInvReflection : SampleWeightInvRefraction;
 
-	// Calculating russian roulette weight terms from the fresnel reflection/refraction (turned off for now)
-	//float NdotH = max(abs(dot(Normal, H)), SHADING_TOLERENCE);
-	//
-	//float FresnelFactor = min(FresnelSchlick(NdotH, vec3(Reflectivity)).r, 1.0);
-	//float GGX_Mask = min(GeometrySmith(NdotV, abs(dot(LightDir, Normal)), Roughness), 1.0);
-
 	// Accumulating all the information
 	sampleInfo.Direction = LightDir;
 	sampleInfo.Weight = 1.0 / max(SampleWeightInv, SHADING_TOLERENCE);
@@ -116,13 +110,22 @@ SampleInfo SampleGlassBSDF(in GlassBSDF_Input bsdfInput)
 	sampleInfo.IsInvalid = dot(LightDir, bsdfInput.Normal) * HemisphereSide <= 0.0 || SampleIndex > 2;
 	sampleInfo.IsReflected = HemisphereSide > 0.0;
 
+	// Calculating russian roulette weight terms from the fresnel reflection/refraction (turned off for now)
+
 	// ******* TODO: to calculate... **********
-	float FresnelFactor = 1.0;
-	float GGX_Mask = 1.0;
-	sampleInfo.Throughput = FresnelFactor * GGX_Mask;
+	//float FresnelFactor = 1.0;
+	//float GGX_Mask = 1.0;
+
+	float NdotH = max(abs(dot(Normal, H)), SHADING_TOLERENCE);
+
+	vec3 FresnelFactor = min(FresnelSchlick(NdotH, vec3(Reflectivity)), 1.0);
+	float GGX_Mask = min(GeometrySmith(NdotV, abs(dot(LightDir, Normal)), Roughness), 1.0);
+
+	// prevent it from dropping too much
+	sampleInfo.Throughput = clamp(FresnelFactor * GGX_Mask, vec3(0.0), vec3(1.0));
 	// ****************************************
 
-	sampleInfo.Throughput = 1.0;
+	sampleInfo.Throughput = vec3(1.0);
 
 	return sampleInfo;
 }

@@ -49,6 +49,7 @@ struct RayInfo
 {
 	alignas(16) glm::uvec2 ImageCoordinate;
 	alignas(16) glm::vec4 Luminance;
+	alignas(16) glm::vec4 Throughput;
 };
 
 // Set 1
@@ -80,6 +81,18 @@ struct Material
 	alignas(4) float RefractiveIndex = 1.0f;
 };
 
+struct ShaderData
+{
+	alignas(4) uint32_t uRayCount;
+
+	// minimum allowed throughput...
+	alignas(4) float ThroughputFloor = 0.15f;
+
+	// Skybox stuff...
+	alignas(4) uint32_t uSkyboxExists = false;
+	// The alpha channel contains the rotation of the cube map
+	alignas(16) glm::vec4 uSkyboxColor = glm::vec4(0.0f, 1.0f, 1.0f, 0.0f);
+};
 struct LightProperties
 {
 	alignas(16) glm::vec3 Color = { 10.0f, 10.0f, 10.0f };
@@ -192,6 +205,8 @@ using RayInfoBuffer = vkEngine::Buffer<RayInfo>;
 
 using MeshInfoBuffer = vkEngine::Buffer<MeshInfo>;
 using LightInfoBuffer = vkEngine::Buffer<LightInfo>;
+
+using ShaderDataUniform = vkEngine::Buffer<ShaderData>;
 
 struct GeometryBuffers
 {

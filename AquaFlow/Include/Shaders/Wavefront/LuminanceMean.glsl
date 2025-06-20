@@ -35,8 +35,11 @@ void main()
 	uvec2 Coordinate = sRayInfos[ActiveBufferIndex(GlobalIdx)].ImageCoordinate;
 	vec3 IncomingLight = sRayInfos[ActiveBufferIndex(GlobalIdx)].Luminance.rgb;
 
-	// Prune out all the active rays, as they haven't been terminated...
-	if (sRays[ActiveBufferIndex(GlobalIdx)].Active == 0)
+	uint activeIdx = sRays[ActiveBufferIndex(GlobalIdx)].Active;
+
+	// Add luminances which only hit the skybox or a light src...
+	//if (activeIdx != -3 && activeIdx != -2)
+	if (activeIdx != -3)
 		IncomingLight = vec3(0.0);
 
 	vec3 ExistingColor = imageLoad(uColorMean, ivec2(Coordinate)).rgb;

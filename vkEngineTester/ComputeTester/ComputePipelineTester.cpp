@@ -9,7 +9,7 @@
 bool ComputePipelineTester::OnStart()
 {
 	PhFlux::EstimatorCreateInfo createInfo{ *mDevice };
-	createInfo.ShaderDirectory = "D:/Dev/VulkanEngine/vkEngineTester/Shaders/RayTracer";
+	createInfo.ShaderDirectory = "D:/Dev/VulkanEngine/AquaFlow/Include/Shaders/RayTracer";
 	createInfo.TargetResolution = { 1920, 1080 };
 	createInfo.TileSize = { 240, 135 };
 	createInfo.TileSize = { 1920, 1080 };
@@ -390,9 +390,10 @@ void ComputePipelineTester::SetSceneWavefront()
 	auto Cup = loader.LoadModel("C:\\Users\\Navjot Singh\\Desktop\\Blender Models\\Cup.obj");
 	auto Sphere = loader.LoadModel("C:\\Users\\Navjot Singh\\Desktop\\Blender Models\\Sphere.obj");
 	auto Plane = loader.LoadModel("C:\\Users\\Navjot Singh\\Desktop\\Blender Models\\Plane.obj");
+	auto Desk = loader.LoadModel("C:\\Users\\Navjot Singh\\Desktop\\Blender Models\\TV Screen.obj");
 
 	AquaFlow::PhFlux::ExecutorCreateInfo executorInfo{};
-	executorInfo.TargetResolution = { 1920, 1080 };
+	executorInfo.TargetResolution = { 1920, 1024 };
 	//executorInfo.TargetResolution = { 1024, 1024 };
 	executorInfo.TileSize = executorInfo.TargetResolution;
 	executorInfo.AllowSorting = false;
@@ -435,14 +436,14 @@ void ComputePipelineTester::SetSceneWavefront()
 	AquaFlow::PhFlux::WavefrontTraceInfo traceInfo{};
 	traceInfo.CameraView = mEditorCamera.GetViewMatrix();
 	traceInfo.MaxSamples = 4096;
-	traceInfo.MinBounceLimit = 1;
-	traceInfo.MaxBounceLimit = 8;
+	traceInfo.MinBounceLimit = 4;
+	traceInfo.MaxBounceLimit = 12;
 
 	traceInfo.CameraSpecs = cameraSpecs;
 
 	mTraceSession.Begin(traceInfo);
 
-	int nodeTreeDepth = 12;
+	int nodeTreeDepth = 18;
 
 	auto SubmitRenderable = [this, nodeTreeDepth](AquaFlow::MeshData& mesh, uint32_t matIdx)
 	{
@@ -452,15 +453,34 @@ void ComputePipelineTester::SetSceneWavefront()
 
 	auto SubmitLightSrc = [this, nodeTreeDepth](AquaFlow::MeshData& mesh, const glm::vec3& color)
 	{
-		mesh.SetMaterialRef(0);
+		static uint32_t lightIdx = 0;
+
+		mesh.SetMaterialRef(lightIdx++);
 		mTraceSession.SubmitLightSrc(mesh, color, nodeTreeDepth);
 	};
 
+#if 1
 	SubmitRenderable(Cube[5], 0);
-	SubmitRenderable(Cube[1], 3);
-	//SubmitRenderable(Cube[4], 1);
+	SubmitRenderable(Cube[1], 4);
+	//SubmitRenderable(Cube[2], 3);
+	//SubmitRenderable(Cube[3], 3);
+	//SubmitRenderable(Cube[6], 4);
+	SubmitRenderable(Cube[4], 1);
 
 	SubmitLightSrc(Cube[0], { 10.0f, 10.0f, 10.0f });
+	//SubmitLightSrc(Cube[2], { 10.0f, 0.0f, 10.0f });
+	//SubmitLightSrc(Cube[3], { 0.0f, 10.0f, 10.0f });
+
+#else
+
+	SubmitRenderable(Desk[0], 0);
+	SubmitRenderable(Desk[1], 0);
+	SubmitRenderable(Desk[2], 0);
+	SubmitRenderable(Desk[3], 0);
+	SubmitRenderable(Desk[4], 0);
+	SubmitLightSrc(Desk[5], { 10.0f, 10.0f, 10.0f });
+
+#endif#
 
 	mTraceSession.End();
 
@@ -513,7 +533,7 @@ void ComputePipelineTester::CreateMaterialPipelines()
 #endif
 
 	mDiffuseMaterial = mWavefrontEstimator->CreateMaterialPipeline(createInfo);
-	mDiffuseMaterial.InsertImageResource({ 1, 0, 0 }, image);
+	mDiffuseMaterial.InsertImageResource({ 2, 0, 0 }, image);
 
 	createInfo.ShaderCode = R"(
 	import GlossyBSDF
@@ -531,6 +551,10 @@ void ComputePipelineTester::CreateMaterialPipelines()
 
 		sampleInfo.Luminance = GlossyBSDF(glossyInput, sampleInfo);
 
+		//sampleInfo.Luminance = vec3(1.0, 0.0, 1.0);
+		//sampleInfo.IsInvalid = false;
+		//sampleInfo.Weight = 1.0;
+
 		return sampleInfo;
 	}
 		)";
@@ -546,7 +570,7 @@ void ComputePipelineTester::CreateMaterialPipelines()
 		refractionInput.ViewDir = -ray.Direction;
 		refractionInput.Normal = collisionInfo.Normal;
 		refractionInput.BaseColor = vec3(0.0, 1.0, 1.0);
-		refractionInput.Roughness = 0.1;
+		refractionInput.Roughness = 0.3;
 		refractionInput.RefractiveIndex = 1.33;
 		refractionInput.NormalInverted = collisionInfo.NormalInverted;
 
@@ -568,12 +592,12 @@ void ComputePipelineTester::CreateMaterialPipelines()
 		CookTorranceBSDF_Input cookTorranceInput;
 		cookTorranceInput.ViewDir = -ray.Direction;
 		cookTorranceInput.Normal = collisionInfo.Normal;
-		cookTorranceInput.BaseColor = vec3(1.0, 1.0, 1.0);
-		cookTorranceInput.Roughness = 0.7;
-		cookTorranceInput.Roughness = 0.00001;
+		cookTorranceInput.BaseColor = vec3(0.6, 0.0, 0.6);
+		cookTorranceInput.Roughness = 0.4;
+		//cookTorranceInput.Roughness = 0.00001;
 		cookTorranceInput.Metallic = 0.0;
-		cookTorranceInput.RefractiveIndex = 1.5;
-		cookTorranceInput.TransmissionWeight = 1.0;
+		cookTorranceInput.RefractiveIndex = 7.5;
+		cookTorranceInput.TransmissionWeight = 0.0;
 		cookTorranceInput.NormalInverted = collisionInfo.NormalInverted;
 
 		SampleInfo sampleInfo = SampleCookTorranceBSDF(cookTorranceInput);
@@ -594,8 +618,8 @@ void ComputePipelineTester::CreateMaterialPipelines()
 		GlassBSDF_Input glassInput;
 		glassInput.ViewDir = -ray.Direction;
 		glassInput.Normal = collisionInfo.Normal;
-		glassInput.BaseColor = vec3(1.0, 1.0, 1.0);
-		glassInput.Roughness = 0.00001;
+		glassInput.BaseColor = vec3(0.0, 0.8, 0.8);
+		glassInput.Roughness = 0.000001;
 		glassInput.RefractiveIndex = 1.5;
 		glassInput.NormalInverted = collisionInfo.NormalInverted;
 

@@ -149,6 +149,11 @@ private:
 
 VK_END
 
+std::string VK_NAMESPACE::ShaderCompiler::GetShaderStageString(vk::ShaderStageFlagBits flag)
+{
+	return sCompilerInitializer.GetShaderStageString(flag);
+}
+
 VK_NAMESPACE::ShaderCompiler::ShaderCompiler(const ShaderCompiler& other)
 	: mEnvironment(other.mEnvironment) {}
 
@@ -163,6 +168,7 @@ VK_NAMESPACE::CompileResult VK_NAMESPACE::ShaderCompiler::Compile(ShaderInput&& 
 {
 	CompileResult Result;
 	Result.Config = mEnvironment.GetConfig();
+	Result.Error.ShaderStage = Input.Stage;
 
 	if (!Input.FilePath.empty())
 		ReadAndPreprocess(Result, Input);
@@ -303,8 +309,8 @@ void VK_NAMESPACE::ShaderCompiler::ResetInternal(const CompilerConfig& new_in)
 
 void VK_NAMESPACE::ShaderCompiler::OptimizeCode(CompileResult& Result, OptimizerFlag Flag)
 {
-	/********************* OPTIMISATIONS **************************/
-	// Aggressively optimize for performance as much as we can for now
+	/********************* OPTIMIZATIONS **************************/
+	// Optimize for performance as much as we can for now
 
 	if (Flag != OptimizerFlag::eNone)
 	{

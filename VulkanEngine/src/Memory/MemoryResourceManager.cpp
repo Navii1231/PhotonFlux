@@ -1,5 +1,11 @@
 #include "Memory/MemoryResourceManager.h"
 
+VK_NAMESPACE::GenericBuffer VK_NAMESPACE::MemoryResourceManager::CreateGenericBuffer(
+	const BufferCreateInfo& input) const
+{
+	return CreateBuffer<GenericBuffer::Type>(input);
+}
+
 VK_NAMESPACE::Image VK_NAMESPACE::MemoryResourceManager::CreateImage(const ImageCreateInfo& info) const
 {
 	auto Device = mDevice;

@@ -20,8 +20,13 @@ SampleInfo SampleDiffuseBSDF(in DiffuseBSDF_Input bsdfInput)
     sampleInfo.IsInvalid = false;
     sampleInfo.IsReflected = true;
 
-    // TODO: to calculate
-    sampleInfo.Throughput = 1.0;
+    // Calculating russian roulette
+    float NdotL = dot(bsdfInput.Normal, sampleInfo.Direction);
+    float NdotV = dot(bsdfInput.Normal, bsdfInput.ViewDir);
+
+    sampleInfo.Throughput = vec3(NdotL);
+
+    //sampleInfo.Throughput = vec3(1.0);
 
     return sampleInfo;
 }

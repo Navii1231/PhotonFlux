@@ -3,6 +3,18 @@
 
 AQUA_BEGIN
 
+/**************** Next thing TODO *******************
+	The materials often consist of uniquely named parameters
+	tuned out and set by the artists. Thus, we need a way to
+	access those random parameters from the material
+	by their names. Furthermore, a material also contains
+	a shader often found in terms of graph or a tree. The shader determines
+	how those parameters are used and what resources
+	are required to shade the object. In other words,
+	we want a material system which can translate this graph int a
+	parameterized shader that we can run on the GPU
+* ***************************************************/
+
 class Geometry3D
 {
 public:
@@ -30,7 +42,7 @@ private:
 	GeometryNode* mRootNode = nullptr;
 	
 	std::vector<MeshData> mMeshes;
-	std::vector<MaterialInfo> mMaterials;
+	std::vector<MaterialInfo> mMaterials; // Limited to shaders models but doesn't work for generic materials
 
 	friend class MeshLoader;
 

@@ -68,7 +68,7 @@ private:
 	void InvalidateMaterialData();
 
 	void RecordMaterialPipelines(vk::CommandBuffer commandBuffer,
-		uint32_t pRayCount, uint32_t pActiveBuffer, glm::uvec3 workGroups);
+		uint32_t pRayCount, uint32_t pBounceIdx, uint32_t pActiveBuffer, glm::uvec3 workGroups);
 
 	void UpdateMaterialDescriptors();
 

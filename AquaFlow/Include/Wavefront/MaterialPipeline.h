@@ -51,6 +51,8 @@ private:
 	LightInfoBuffer mLightInfos;
 	LightPropsBuffer mLightProps;
 
+	ShaderDataUniform mShaderData;
+
 private:
 	// Other sets...
 	std::unordered_map<vkEngine::DescriptorLocation, vkEngine::Core::BufferChunk> mBuffers;

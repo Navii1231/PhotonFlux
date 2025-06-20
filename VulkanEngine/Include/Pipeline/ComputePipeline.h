@@ -69,8 +69,8 @@ inline void ComputePipeline<PipelineContextType, BasePipeline>::SetShaderConstan
 
 	_VK_ASSERT(subranges.find(name) != subranges.end(),
 		"Failed to find the push constant field \"" << name << "\" in the shader source code\n"
-		"Note: If you have turned on shader optimizations (vkEngine::OptimizerFlag::eO3) "
-		"and not using the field in the shader, then the field will not appear in the reflections"
+		"Note: If you turned on shader optimizations (vkEngine::OptimizerFlag::eO3) "
+		"or not using the field in the shader, it won't appear in the reflections"
 	);
 
 	const vk::PushConstantRange range = subranges.at(name);
@@ -95,7 +95,7 @@ inline void ComputePipeline<PipelineContextType, BasePipeline>::Dispatch(const g
 	// TODO: might be a good idea to bind the pipeline every time before dispatching...
 	// Or the headache for binding the pipeline may be left on the client
 	// Haven't decided yet
-	//commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, mPipelineHandles->Handle);
+	// commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, mPipelineHandles->Handle);
 
 	if (!mPipelineHandles->SetCache.empty())
 		commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute,

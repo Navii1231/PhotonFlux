@@ -116,7 +116,7 @@ const AQUA_NAMESPACE::ExpressionOperation* AQUA_NAMESPACE::DeclAssignParser::
 
 	const ExpressionOperation* opFound = nullptr;
 
-	std::any_of(operators.begin(), operators.end(),
+	bool found = std::any_of(operators.begin(), operators.end(),
 		[&Concatenation, &opFound](const ExpressionOperation& op)
 	{
 		if (op.Lexeme == Concatenation)

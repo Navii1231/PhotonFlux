@@ -36,6 +36,19 @@ public:
 		return Errors;
 	}
 
+	void AssertOnError(const std::vector<vkEngine::CompileError>& errors) const
+	{
+		for (const auto& cError : errors)
+		{
+			std::string errorString = cError.Info;
+
+			_VK_ASSERT(errorString.empty(),
+				"Error found in " << 
+				vkEngine::ShaderCompiler::GetShaderStageString(cError.ShaderStage) <<
+				" shader" << ": \n\n" << errorString);
+		}
+	}
+
 	void AssertOnError(const std::vector<std::string>& errorValues) const
 	{
 		for (const auto& errorValue : errorValues)

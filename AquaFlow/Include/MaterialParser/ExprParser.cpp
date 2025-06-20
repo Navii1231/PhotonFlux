@@ -156,7 +156,7 @@ bool AQUA_NAMESPACE::ExprParser::Reduce()
 
 	std::vector<NodeAST*> operands(oper.OperandCount);
 
-	for (uint32_t i = 0; i < oper.OperandCount; i++)
+	for (int32_t i = 0; i < oper.OperandCount; i++)
 	{
 		operands[i] = mOperandStack.top();
 		mOperandStack.pop();
@@ -413,7 +413,7 @@ const AQUA_NAMESPACE::ExpressionOperation* AQUA_NAMESPACE::ExprParser::
 
 	const ExpressionOperation* opFound = nullptr;
 
-	std::any_of(operators.begin(), operators.end(), 
+	bool found = std::any_of(operators.begin(), operators.end(), 
 		[&Concatenation, &opFound](const ExpressionOperation& op)
 	{
 		if (op.Lexeme == Concatenation)

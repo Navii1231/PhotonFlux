@@ -7,6 +7,17 @@ vec3 GammaCorrectionInv(in vec3 color)
 	return pow(color, vec3(2.2));
 }
 
+float NormalizedMagnitude(in vec3 throughput)
+{
+	// Max value of the magnitude is assumed to be sqrt(3) for vec3(1, 1, 1)
+	return length(throughput) / sqrt(3);
+}
+
+float MaxComponent(in vec3 vec)
+{
+	return max(vec.x, max(vec.y, vec.z));
+}
+
 // Sampling the environment map...
 vec3 SampleCubeMap(in vec3 Direction, float Rotation)
 {
@@ -36,18 +47,16 @@ SampleInfo EvaluateLightShader(in Ray ray, in CollisionInfo collisionInfo)
 	sampleInfo.IsInvalid = false;
 	sampleInfo.Weight = 1.0;
 	sampleInfo.SurfaceNormal = vec3(0.0);
-	sampleInfo.Throughput = 0.0;
+	sampleInfo.Throughput = vec3(1.0);
 
 	sampleInfo.Luminance = sLightPropsInfos[sLightInfos[collisionInfo.MaterialIndex].LightPropsIndex].Color;
-
-	// TODO: for debugging purposes...
-	sampleInfo.iNormal = sampleInfo.Luminance;
 
 	return sampleInfo;
 }
 
-SampleInfo EvokeShader(in Ray ray, in CollisionInfo collisionInfo, uint materialRef)
+SampleInfo EvokeShader(in Ray ray, in CollisionInfo collisionInfo, in uint materialRef)
 {
+	// TODO: Can be optimized...
 	switch (materialRef)
 	{
 		case EMPTY_MATERIAL_ID:
@@ -55,6 +64,7 @@ SampleInfo EvokeShader(in Ray ray, in CollisionInfo collisionInfo, uint material
 			emptySample.Weight = 1.0;
 			emptySample.Luminance = vec3(0.0);
 			emptySample.IsInvalid = false;
+			emptySample.Throughput = vec3(uThroughputFloor);
 
 			return emptySample;
 
@@ -67,12 +77,13 @@ SampleInfo EvokeShader(in Ray ray, in CollisionInfo collisionInfo, uint material
 			SampleInfo skyboxInfo;
 			skyboxInfo.Weight = 1.0;
 			skyboxInfo.IsInvalid = false;
+			skyboxInfo.Throughput = vec3(1.0);
 
-			if (pSkyboxExists != 0)
+			if (uSkyboxExists != 0)
 				//sampleInfo.Luminance = SampleCubeMap(ray.Direction, pSkyboxColor.w);
 				skyboxInfo.Luminance = vec3(1.0, 0.0, 0.0);
 			else
-				skyboxInfo.Luminance = pSkyboxColor.rgb;
+				skyboxInfo.Luminance = uSkyboxColor.rgb;
 
 			return skyboxInfo;
 
@@ -86,19 +97,27 @@ void main()
 {
 	uint GlobalIdx = gl_GlobalInvocationID.x;
 
-	if (GlobalIdx >= pRayCount)
+	if (GlobalIdx >= uRayCount)
 		return;
 
-	Ray ray = sRays[GetActiveIndex(GlobalIdx)];
+	if (uRayCount == 0)
+		return;
+
 	CollisionInfo collisionInfo = sCollisionInfos[GetActiveIndex(GlobalIdx)];
 	RayInfo rayInfo = sRayInfos[GetActiveIndex(GlobalIdx)];
+	Ray ray = sRays[GetActiveIndex(GlobalIdx)];
 
-	uint MaterialRef = ray.MaterialIndex;
+	if (ray.Active == 0)
+		return;
+
+	// Initializing the random numbers
+	sRandomSeed = HashCombine(GlobalIdx, pRandomSeed);
+
+	if (sRandomSeed == 0)
+		sRandomSeed = 0x9e3770b9;
 
 	// Dispatch the correct material here, and don't process the inactive rays
-
-	if (ray.Active != 0)
-		return;
+	uint MaterialRef = ray.MaterialIndex;
 
 	bool MaterialPass = (MaterialRef == pMaterialRef);
 
@@ -110,12 +129,43 @@ void main()
 	if (!(MaterialPass || InactivePass))
 		return;
 
-	sRandomSeed = HashCombine(GlobalIdx, pRandomSeed);
+	// Sampling and dispatching to the approapriate shader
+	SampleInfo sampleInfo;
 
-	if (sRandomSeed == 0)
-		sRandomSeed = 0x9e3770b9;
+	if (InactivePass)
+		sampleInfo = EvokeShader(ray, collisionInfo, MaterialRef);
+	else
+		sampleInfo = Evaluate(ray, collisionInfo);
 
-	SampleInfo sampleInfo = EvokeShader(ray, collisionInfo, MaterialRef);
+	//SampleInfo sampleInfo = EvokeShader(ray, collisionInfo, MaterialRef);
+
+	// prevent the throughput from dropping too much
+	// sampleInfo.Throughput = max(vec3(uThroughputFloor), sampleInfo.Throughput);
+
+	if (pBounceCount < 4)
+		sampleInfo.Throughput = vec3(1.0);
+
+
+	rayInfo.Throughput.xyz *= sampleInfo.Throughput;
+	
+	sRayInfos[GetActiveIndex(GlobalIdx)].Throughput = rayInfo.Throughput;
+
+	float cutoff = NormalizedMagnitude(rayInfo.Throughput.xyz);
+	cutoff = max(uThroughputFloor, cutoff);
+
+	/************ applying the russian roulette ***************/
+
+	float Xi = GetRandom(sRandomSeed);
+
+	if (Xi > cutoff)
+	{
+		sRays[GetActiveIndex(GlobalIdx)].Active = RR_CUTOFF_CONST;
+		return;
+	}
+
+	sampleInfo.Luminance /= cutoff;
+
+	/**********************************************************/
 
 	// Update the color values and ray directions
 	if(!sampleInfo.IsInvalid)
@@ -128,11 +178,13 @@ void main()
 
 	float sign = sampleInfo.IsReflected ? 1.0 : -1.0;
 
+	// Aim at the sampled direction
 	sRays[GetActiveIndex(GlobalIdx)].Origin =
 		collisionInfo.IntersectionPoint + sign * collisionInfo.Normal * TOLERENCE;
 
 	sRays[GetActiveIndex(GlobalIdx)].Direction = sampleInfo.Direction;
 
+	// Figure out if the ray went into a terminating material
 	if (collisionInfo.HitOccured)
 		sRays[GetActiveIndex(GlobalIdx)].Active = collisionInfo.IsLightSrc ? LIGHT_MATERIAL_ID : 0;
 	else
@@ -140,6 +192,4 @@ void main()
 
 	if (sampleInfo.IsInvalid)
 		sRays[GetActiveIndex(GlobalIdx)].Active = EMPTY_MATERIAL_ID;
-
-	//sRays[GetActiveIndex(GlobalIdx)].Active = LIGHT_MATERIAL_ID;
 }
