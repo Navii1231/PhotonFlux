@@ -1,6 +1,7 @@
+#include "Core/Aqpch.h"
 #include "Wavefront/TraceSession.h"
 
-#include "Wavefront/BVH_Factory.h"
+#include "Wavefront/BVHFactory.h"
 
 void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::TraceSession::Begin(const WavefrontTraceInfo& beginInfo)
 {
@@ -26,7 +27,7 @@ void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::TraceSession::SubmitRenderable(const Mes
 	_STL_ASSERT(mSessionInfo->State == TraceSessionState::eOpenScope,
 		"SubmitRenderable method requires the WavefrontEstimator to be in eOpenScope state!");
 
-	auto bvhStruct = std::move(GetBVH(meshData, bvhDepth));
+	auto bvhStruct = std::move(CreateBVH(meshData, bvhDepth));
 
 	size_t NodeCount = mSessionInfo->LocalBuffers.Nodes.GetSize();
 
@@ -45,7 +46,7 @@ void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::TraceSession::SubmitLightSrc(const MeshD
 	_STL_ASSERT(mSessionInfo->State == TraceSessionState::eOpenScope,
 		"SubmitRenderable method requires the WavefrontEstimator to be in eOpenScope state!");
 
-	auto bvhStruct = GetBVH(meshData, bvhDepth);
+	auto bvhStruct = std::move(CreateBVH(meshData, bvhDepth));
 
 	size_t NodeCount = mSessionInfo->LocalBuffers.Nodes.GetSize();
 
@@ -143,12 +144,21 @@ void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::TraceSession::UpdateSceneBuffers()
 	mSessionInfo->CameraSpecsBuffer << mSessionInfo->CameraSpecs;
 }
 
-AQUA_NAMESPACE::PH_FLUX_NAMESPACE::BVH AQUA_NAMESPACE::PH_FLUX_NAMESPACE::TraceSession::GetBVH(
+AQUA_NAMESPACE::PH_FLUX_NAMESPACE::BVH AQUA_NAMESPACE::PH_FLUX_NAMESPACE::TraceSession::CreateBVH(
 	const MeshData& meshData, uint32_t bvhDepth)
 {
-	// TODO: This routine is quite inefficient! maybe use GPU to create BVH tree or store it ahead of time!
-	BVH_Factory bvhFactory(meshData.aPositions, meshData.aFaces);
-	BVH bvhStruct = bvhFactory.MakeBVH(bvhDepth);
+	// TODO: Here, we could use GPU to create BVH tree and store it ahead of time!
+	BVHFactory bvhFactory;
+
+	SplitStrategy strategy{};
+	strategy.mSplit = BVHFactory::DefaultSplitFn::sSpatialSplit;
+
+	bvhFactory.SetSplitStrategy(strategy);
+	bvhFactory.SetDepth(bvhDepth);
+
+	BVH bvhStruct = bvhFactory.Build(meshData.aPositions.begin(), meshData.aPositions.end(),
+		meshData.aFaces.begin(), meshData.aFaces.end());
+
 	return bvhStruct;
 }
 

@@ -26,7 +26,7 @@ public:
 	{ return mQueues.at(index).Capabilities; }
 
 	// Getter for info...
-	uint32_t GetQueueCount(uint32_t FamilyIndex) const;
+	uint32_t GetQueueCount(uint32_t familyIndex) const;
 
 	Core::QueueFamilyIndices GetPresentQueueFamilyIndices() const;
 
@@ -52,7 +52,9 @@ private:
 	QueueManager(const QueueManager&) = delete;
 	QueueManager& operator =(const QueueManager&) = delete;
 
-	friend class Device;
+	friend class Context;
 };
+
+using QueueManagerRef = std::shared_ptr<const QueueManager>;
 
 VK_END

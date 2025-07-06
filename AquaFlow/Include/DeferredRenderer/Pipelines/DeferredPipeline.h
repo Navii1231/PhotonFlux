@@ -1,6 +1,7 @@
 #pragma once
 #include "PipelineConfig.h"
 #include "../Renderable/DeferredRenderable.h"
+#include "../Renderable/CopyIndices.h"
 #include "../Renderable/RenderableBuilder.h"
 
 AQUA_BEGIN
@@ -28,241 +29,123 @@ AQUA_BEGIN
 
 using DeferredRenderable = Renderable;
 
-class DeferredPipelineContext : public vkEngine::PipelineContext
+struct DeferredPipelineCreateInfo
 {
-public:
+	vkEngine::Context Ctx;
+	vkEngine::PShader DeferShader;
+	vkEngine::PShader IdxCpyShader;
+	glm::vec2 ScrSize;
+};
+
+// TODO: IndexType is uint32_t by default
+struct DeferredPipelineContext
+{
+	DeferredPipelineContext() = default;
+
 	template <typename Iter>
-	inline DeferredPipelineContext(vkEngine::Device ctx, const glm::uvec2& scrSize,
-		Iter tagBegin, Iter tagEnd);
+	DeferredPipelineContext(Iter tagBegin, Iter tagEnd)
+		: vLayout(tagBegin, tagEnd) {}
 
-public:
-	virtual vkEngine::Framebuffer GetFramebuffer() const { return mGeometryBuffer; }
+	~DeferredPipelineContext() { Alloc.Free(Cmds); }
 
-	// The specified resources will be copied into the vertex buffer
-	inline virtual void CopyVertices(const DeferredRenderable&) const;
-	inline virtual void CopyIndices(const DeferredRenderable&, uint32_t) const;
+	VertexLayout vLayout = 
+	{ TAG_POSITION, TAG_NORMAL, TAG_TANGENT, TAG_BITANGENT, 
+		TAG_TEXTURE_COORDS, TAG_MATERIAL_IDS, TAG_DEPTH_STENCIL };
 
-	// Required by the GraphicsPipeline
-	virtual size_t GetVertexCount(const DeferredRenderable& renderable) const
-	{ return renderable.Info.Mesh.aPositions.size(); }
-	// Required by the GraphicsPipeline
-	virtual size_t GetIndexCount(const DeferredRenderable& renderable) const
-	{ return renderable.Info.Mesh.aPositions.size(); }
-
-	inline virtual void UpdateDescriptors(vkEngine::DescriptorWriter& writer);
-
-	// To set the buffer manually
-	vkEngine::GenericBuffer& operator()(const std::string& tag) { return mVertexResources[tag].Buffer; }
-	const vkEngine::GenericBuffer& operator()(const std::string& tag) const { return mVertexResources.at(tag).Buffer; }
-
-	std::unordered_map<std::string, VertexResource> GetResources() const { return mVertexResources; }
-
-private:
-	VertexLayout mVertexLayout = 
-	{ TAG_POSITION, TAG_NORMAL, TAG_TANGENT_SPACE, TAG_TEXTURE_COORDS, TAG_MATERIAL_IDS, TAG_INDEX };
-
-	vkEngine::BasicGraphicsPipelineSettings mBasicConfig;
+	vkEngine::GraphicsPipelineConfig PipelineConfig;
 
 	// Generic buffers are more expressive than templates at runtime
 	
-	// Entry '@index' contains the depth buffer
-	VertexResourceMap mVertexResources;
+	VertexResourceMap VertexResources;
 
-	vkEngine::Framebuffer mGeometryBuffer;
+	CopyIdxPipeline CopyIdx;
 
-	vkEngine::Device mCtx;
+	mutable vkEngine::CommandBufferAllocator Alloc;
+	mutable vkEngine::Core::Executor Exec;
+	mutable vk::CommandBuffer Cmds;
 
-	mutable size_t mMeshIdx = 0;
-	mutable vkEngine::Buffer<glm::mat4> mSharedModels; // Local buffer
-	mutable vkEngine::Buffer<glm::mat4> mModels; // Bound at (set: 0, binding: 1)
+	mutable size_t MeshIdx = 0;
+	mutable size_t VertexCount = 0;
 
-	mutable vkEngine::Buffer<CameraInfo> mCamera; // Bound at (set: 0, binding: 0)
+	// readonly stuff, so we can afford them to be host coherent
+	mutable Mat4Buf SharedModels; // Local buffer
+	mutable Mat4Buf Models; // Bound at (set: 0, binding: 1)
 
-private:
-	inline void CreateFramebuffer(uint32_t width, uint32_t height);
-	inline void SetupBasicConfig(const glm::uvec2& scrSize);
-
-	inline vkEngine::RenderContextCreateInfo CreateRenderCtxInfo();
-
-	friend class DeferredPipeline;
+	mutable vkEngine::Buffer<CameraInfo> Camera; // Bound at (set: 0, binding: 0)
 };
 
-template <typename Iter>
-inline DeferredPipelineContext::DeferredPipelineContext(vkEngine::Device ctx, const glm::uvec2& scrSize,
-	Iter tagBegin, Iter tagEnd)
-	: PipelineContext(vkEngine::PipelineType::eGraphics), mCtx(ctx), mVertexLayout(tagBegin, tagEnd)
+// What layout we should pass from the CPU, AOS or SOA?
+class DeferredPipeline : public vkEngine::GraphicsPipeline<DeferredRenderable>
 {
-	SetupBasicConfig(scrSize);
+public:
+	using ParentPipeline = vkEngine::GraphicsPipeline<DeferredRenderable>;
 
-	auto rcb = mCtx.FetchRenderContextBuilder(vk::PipelineBindPoint::eGraphics);
+public:
+	DeferredPipeline() = default;
 
-	mBasicConfig.TargetContext = rcb.MakeContext(CreateRenderCtxInfo());
+	// using default tags
+	DeferredPipeline(const DeferredPipelineCreateInfo& createInfo);
 
-	CreateFramebuffer(scrSize.x, scrSize.y);
+	template <typename Iter>
+	DeferredPipeline(const DeferredPipelineCreateInfo& createInfo, Iter tagBegin, Iter tagEnd)
+		: mVulkanCtx(createInfo.Ctx), mDeferredCtx(tagBegin, tagEnd) { SetupPipeline(createInfo); }
 
-#if 0
-	auto memoryManager = mCtx.MakeMemoryResourceManager();
+	virtual void UpdateDescriptors() override;
 
-	vkEngine::BufferCreateInfo indexInfo
-	{ 1, vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eHostCoherent };
+	virtual void Cleanup() override;
 
-	vkEngine::BufferCreateInfo vertexInfo
-	{ 1, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eHostCoherent };
+	virtual void SubmitRenderable(const DeferredRenderable& renderable) const override;
 
-	RecreateBuffers(indexInfo, vertexInfo);
+	virtual size_t GetVertexCount() const override
+	{ return mDeferredCtx->VertexCount; }
 
-#endif
-}
+	virtual size_t GetIndexCount() const override
+	{ return GetIndexBuffer().GetSize() / sizeof(uint32_t); }
 
-inline void DeferredPipelineContext::CreateFramebuffer(uint32_t width, uint32_t height)
-{
-	mGeometryBuffer = mBasicConfig.TargetContext.CreateFramebuffer(width, height);
+	virtual const vkEngine::GraphicsPipelineConfig& GetConfig() const { return mDeferredCtx->PipelineConfig; }
 
-	auto cAttachs = mGeometryBuffer.GetColorAttachments();
+	void SetSampler(const std::string& tag, vkEngine::Core::Ref<vk::Sampler> sampler);
+	void SetIndexBuffer(const vkEngine::GenericBuffer& buf) { mDeferredCtx->CopyIdx.mIdxBuf = buf; }
 
-	for (size_t i = 0; i < cAttachs.size(); i++)
-	{
-		mVertexResources[mVertexLayout[i]].Image = cAttachs[i];
-	}
+	void SetCamera(const glm::mat4& projection, const glm::mat4& view)
+	{ mDeferredCtx->Camera.Clear(); mDeferredCtx->Camera << CameraInfo(projection, view); }
 
-	mVertexResources[TAG_INDEX].Image = mGeometryBuffer.GetDepthStencilAttachment();
-}
+	vkEngine::Buffer<CameraInfo> GetCamera() const { return mDeferredCtx->Camera; }
 
-inline void DeferredPipelineContext::SetupBasicConfig(const glm::uvec2& scrSize)
-{
-	mBasicConfig.CanvasScissor = vk::Rect2D(scrSize.x, scrSize.y);
-	mBasicConfig.CanvasView = vk::Viewport(0.0f, 0.0f, (float)scrSize.x, (float)scrSize.y, 0.0f, 1.0f);
+	vkEngine::GenericBuffer GetIndexBuffer() const { return mDeferredCtx->CopyIdx.mIdxBuf; }
+	vkEngine::Buffer<CameraInfo> GetCameraBuffer() const { return mDeferredCtx->Camera; }
 
-	mBasicConfig.IndicesType = vk::IndexType::eUint32;
+	// To set the buffer manually
+	vkEngine::GenericBuffer& operator[](const std::string& tag) { return mDeferredCtx->VertexResources[tag].Buffer; }
+	const vkEngine::GenericBuffer& operator[](const std::string& tag) const { return mDeferredCtx->VertexResources.at(tag).Buffer; }
 
-#if 0
-	mBasicConfig.VertexInput.Bindings.emplace_back(0, (uint32_t)sizeof(GBufferVertexType));
+	const VertexResourceMap& GetGeometry() const { return mDeferredCtx->VertexResources; }
 
-	mBasicConfig.VertexInput.Attributes.emplace_back(0, 0, vk::Format::eR32G32B32A32Sfloat, 0);
-	mBasicConfig.VertexInput.Attributes.emplace_back(1, 0, vk::Format::eR32G32B32A32Sfloat, static_cast<uint32_t>(1 * sizeof(glm::vec4)));
-	mBasicConfig.VertexInput.Attributes.emplace_back(2, 0, vk::Format::eR32G32B32A32Sfloat, static_cast<uint32_t>(2 * sizeof(glm::vec4)));
-	mBasicConfig.VertexInput.Attributes.emplace_back(3, 0, vk::Format::eR32G32B32A32Sfloat, static_cast<uint32_t>(3 * sizeof(glm::vec4)));
-	mBasicConfig.VertexInput.Attributes.emplace_back(4, 0, vk::Format::eR32G32B32A32Sfloat, static_cast<uint32_t>(4 * sizeof(glm::vec4)));
-	mBasicConfig.VertexInput.Attributes.emplace_back(5, 0, vk::Format::eR32G32Sfloat, static_cast<uint32_t>(4 * sizeof(glm::vec4) + 1 * sizeof(glm::vec2)));
-#endif
+private:
+	std::shared_ptr<DeferredPipelineContext> mDeferredCtx;
+	vkEngine::Context mVulkanCtx;
 
-	mBasicConfig.SubpassIndex = 0;
+private:
+	// Helper functions...
 
-	mBasicConfig.DepthBufferingState.DepthBoundsTestEnable = false;
-	mBasicConfig.DepthBufferingState.DepthCompareOp = vk::CompareOp::eLess;
-	mBasicConfig.DepthBufferingState.DepthTestEnable = true;
-	mBasicConfig.DepthBufferingState.DepthWriteEnable = true;
-	mBasicConfig.DepthBufferingState.MaxDepthBounds = 1.0f;
-	mBasicConfig.DepthBufferingState.MinDepthBounds = 0.0f;
-	mBasicConfig.DepthBufferingState.StencilTestEnable = false;
+	void CreateFramebuffer(uint32_t width, uint32_t height);
+	void SetupBasicConfig(const glm::uvec2& scrSize);
 
-	mBasicConfig.Rasterizer.CullMode = vk::CullModeFlagBits::eBack;
-	mBasicConfig.Rasterizer.FrontFace = vk::FrontFace::eCounterClockwise;
-	mBasicConfig.Rasterizer.LineWidth = 0.01f;
-	mBasicConfig.Rasterizer.PolygonMode = vk::PolygonMode::eFill;
-}
+	vkEngine::RenderContextCreateInfo CreateRenderCtxInfo();
 
-inline void DeferredPipelineContext::CopyVertices(const DeferredRenderable& renderable) const
-{
-	_STL_ASSERT(false, "calling an unimplemented function");
+	void CreateCopyIdxPipeline(const vkEngine::PShader& shader);
 
-#if 0
-	// Copying the model matrix to the shared buffer
-	mSharedModels << renderable.ModelTransform;
+	virtual void BindVertexBuffers(vk::CommandBuffer commandBuffer) const override;
+	virtual void BindIndexBuffer(vk::CommandBuffer commandBuffer) const override;
 
-	// Copying the vertex attributes
-	auto vb = std::get<0>(mVertexBuffers);
+	void SetupPipeline(const DeferredPipelineCreateInfo& createInfo);
 
-	auto* mem = vb.MapMemory(GetVertexCount(renderable));
+	void GenerateBuffers();
 
-	for (size_t i = 0; i < GetVertexCount(renderable); i++)
-	{
-		mem->Position = glm::vec4(renderable.Info.Mesh.aPositions[i], 1.0f);
-		mem->Normals = glm::vec4(renderable.Info.Mesh.aNormals[i], 1.0f);
-		mem->Tangents = glm::vec4(renderable.Info.Mesh.aTangents[i], 1.0f);
-		mem->BiTangents = glm::vec4(renderable.Info.Mesh.aBitangents[i], 1.0f);
-		mem->TexCoords = glm::vec4(renderable.Info.Mesh.aTexCoords[i], 1.0f);
-		mem->MaterialIDs = glm::vec2(0.0f, (float) mMeshIdx++); // TODO: Material ID = 0
-	}
+	vkEngine::VertexInputDesc ConstructSOAVertexInput() const;
 
-	vb.UnmapMemory();
-#endif
-}
-
-inline void DeferredPipelineContext::CopyIndices(const DeferredRenderable& renderable, uint32_t offset) const
-{
-	_STL_ASSERT(false, "calling an unimplemented function");
-
-#if 0
-	// Assume all faces are arranged in triangles
-
-	auto* mem = mIndexBuffer.MapMemory(3 * renderable.Info.Mesh.aFaces.size(), offset);
-
-	for (auto face : renderable.Info.Mesh.aFaces)
-	{
-		mem[0] = face.Indices[0];
-		mem[1] = face.Indices[1];
-		mem[2] = face.Indices[2];
-
-		mem++;
-	}
-
-	mIndexBuffer.UnmapMemory();
-#endif
-}
-
-inline void DeferredPipelineContext::UpdateDescriptors(vkEngine::DescriptorWriter& writer)
-{
-	// For now, we only have camera and model matrices
-
-	vkEngine::UniformBufferWriteInfo uniformInfo{};
-	uniformInfo.Buffer = mCamera.GetNativeHandles().Handle;
-
-	writer.Update({ 0, 0, 0 }, uniformInfo);
-
-	vkEngine::StorageBufferWriteInfo storageInfo{};
-	storageInfo.Buffer = mModels.GetNativeHandles().Handle;
-
-	writer.Update({ 0, 1, 0 }, storageInfo);
-}
-
-vkEngine::RenderContextCreateInfo DeferredPipelineContext::CreateRenderCtxInfo()
-{
-	vkEngine::RenderContextCreateInfo ctxCreateInfo{};
-
-	vkEngine::ImageAttachmentInfo attachInfo{};
-	attachInfo.Format = vk::Format::eR32G32B32A32Sfloat;
-	attachInfo.Layout = vk::ImageLayout::eColorAttachmentOptimal;
-	attachInfo.LoadOp = vk::AttachmentLoadOp::eLoad;
-	attachInfo.StoreOp = vk::AttachmentStoreOp::eStore;
-	attachInfo.Samples = vk::SampleCountFlagBits::e1;
-	attachInfo.Usage = vk::ImageUsageFlagBits::eColorAttachment;
-	attachInfo.StencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-	attachInfo.StencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-
-	ctxCreateInfo.ColorAttachments.push_back(attachInfo);
-
-	attachInfo.Format = vk::Format::eR16G16B16A16Sfloat;
-	ctxCreateInfo.ColorAttachments.push_back(attachInfo);
-	ctxCreateInfo.ColorAttachments.push_back(attachInfo);
-	ctxCreateInfo.ColorAttachments.push_back(attachInfo);
-	ctxCreateInfo.ColorAttachments.push_back(attachInfo);
-	ctxCreateInfo.ColorAttachments.push_back(attachInfo);
-
-	ctxCreateInfo.DepthStencilAttachment.Format = vk::Format::eD24UnormS8Uint;
-	ctxCreateInfo.DepthStencilAttachment.Layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-	ctxCreateInfo.DepthStencilAttachment.LoadOp = vk::AttachmentLoadOp::eLoad;
-	ctxCreateInfo.DepthStencilAttachment.StoreOp = vk::AttachmentStoreOp::eStore;
-	ctxCreateInfo.DepthStencilAttachment.Samples = vk::SampleCountFlagBits::e1;
-	ctxCreateInfo.DepthStencilAttachment.Usage = vk::ImageUsageFlagBits::eDepthStencilAttachment;
-	ctxCreateInfo.DepthStencilAttachment.StencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-	ctxCreateInfo.DepthStencilAttachment.StencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-
-	ctxCreateInfo.UsingDepthAttachment = true;
-
-	return ctxCreateInfo;
-}
-
-using DeferredPipeline = vkEngine::GraphicsPipeline<DeferredPipelineContext>;
+	void MakeHollow();
+};
 
 AQUA_END
+

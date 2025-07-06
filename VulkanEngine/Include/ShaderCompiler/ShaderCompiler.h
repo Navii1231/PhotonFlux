@@ -3,8 +3,6 @@
 #include "ShaderConfig.h"
 #include "CompilerEnvironment.h"
 #include "Lexer.h"
-#include <thread>
-#include <mutex>
 
 VK_BEGIN
 
@@ -27,6 +25,7 @@ public:
 	static EShLanguage ConvertShaderStage(vk::ShaderStageFlagBits Stage);
 
 	static std::string GetShaderStageString(vk::ShaderStageFlagBits flag);
+	static vk::ShaderStageFlagBits GetShaderStageFlag(const std::string& shaderStage);
 
 private:
 	// Output/Input fields...

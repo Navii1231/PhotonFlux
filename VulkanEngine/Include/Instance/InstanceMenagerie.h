@@ -4,8 +4,6 @@
 #include "../Core/Ref.h"
 #include "GLFW/glfw3.h"
 
-#include <functional>
-
 VK_BEGIN
 
 #define DELETE_TOKEN    "$(vkEngine.DeleteMessenger)"
@@ -177,16 +175,16 @@ template <typename Callback>
 Core::Ref<vk::DebugUtilsMessengerEXT> VK_NAMESPACE::InstanceMenagerie::CreateDebugMessenger(
 	Core::Ref<vk::Instance> instance, const DebugMessengerCreateInfo& createInfo, Callback callback)
 {
-	vk::DispatchLoaderDynamic dispatcher(*instance, vkGetInstanceProcAddr);
+	vk::detail::DispatchLoaderDynamic dispatcher(*instance, vkGetInstanceProcAddr);
 
 	vk::DebugUtilsMessengerCreateInfoEXT rawCreateInfo{};
 
 	rawCreateInfo.messageSeverity = createInfo.messageSeverity;
 	rawCreateInfo.messageType = createInfo.messageType;
-	rawCreateInfo.pfnUserCallback = [](VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-		VkDebugUtilsMessageTypeFlagsEXT messageTypes,
-		const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-		void* pUserData)->VkBool32
+	rawCreateInfo.pfnUserCallback = [](vk::DebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+		vk::DebugUtilsMessageTypeFlagsEXT messageTypes,
+		const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData,
+		void* pUserData)->vk::Bool32
 	{
 		Callback& UserCallback = *(Callback*) pUserData;
 		std::string DeleteToken = DELETE_TOKEN;
@@ -206,7 +204,7 @@ Core::Ref<vk::DebugUtilsMessengerEXT> VK_NAMESPACE::InstanceMenagerie::CreateDeb
 	return {instance->createDebugUtilsMessengerEXT(rawCreateInfo, nullptr, dispatcher),
 	[instance](vk::DebugUtilsMessengerEXT handle)
 	{
-		vk::DispatchLoaderDynamic dispatcher(*instance, vkGetInstanceProcAddr);
+		vk::detail::DispatchLoaderDynamic dispatcher(*instance, vkGetInstanceProcAddr);
 
 		// Submitting the a callback to the messenger to delete the allocated user memory
 		vk::DebugUtilsMessengerCallbackDataEXT callbackData;

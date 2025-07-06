@@ -1,26 +1,17 @@
+#include "Core/Aqpch.h"
 #include "Wavefront/WavefrontEstimator.h"
 
 #include "ShaderCompiler/Lexer.h"
-#include "Wavefront/BVH_Factory.h"
-
-AQUA_BEGIN
-
-std::string GetShaderDirectory()
-{
-	return "../AquaFlow/Include/Shaders/";
-}
-
-AQUA_END
+#include "Wavefront/BVHFactory.h"
 
 AQUA_NAMESPACE::PH_FLUX_NAMESPACE::WavefrontEstimator::WavefrontEstimator(
 	const WavefrontEstimatorCreateInfo& createInfo)
 	: mCreateInfo(createInfo)
 {
 	mPipelineBuilder = mCreateInfo.Context.MakePipelineBuilder();
-	mMemoryManager = mCreateInfo.Context.MakeMemoryResourceManager();
+	mResourcePool = mCreateInfo.Context.CreateResourcePool();
 
 	RetrieveFrontAndBackEndShaders();
-	InitializePipelineContexts();
 }
 
 AQUA_NAMESPACE::PH_FLUX_NAMESPACE::TraceSession AQUA_NAMESPACE::PH_FLUX_NAMESPACE::
@@ -38,16 +29,38 @@ AQUA_NAMESPACE::PH_FLUX_NAMESPACE::TraceSession AQUA_NAMESPACE::PH_FLUX_NAMESPAC
 AQUA_NAMESPACE::PH_FLUX_NAMESPACE::MaterialPipeline AQUA_NAMESPACE::PH_FLUX_NAMESPACE::WavefrontEstimator::
 	CreateMaterialPipeline(const MaterialCreateInfo& createInfo)
 {
+	/*
+	* user defined macro definitions...
+	* SHADER_TOLERENCE = 0.001, POWER_HEURISTIC_EXP = 2.0,
+	* EMPTY_MATERIAL_ID = -1, SKYBOX_MATERIAL_ID = -2, LIGHT_MATERIAL_ID = -3,
+	* RR_CUTOFF_CONST
+	*/
+
 	MaterialCreateInfo pipelineCreation = createInfo;
 	pipelineCreation.ShaderCode = StitchFrontAndBackShaders(createInfo.ShaderCode);
 
-	MaterialPipelineContext context{};
-	context.Prepare(pipelineCreation, mCreateInfo.Tolerence);
+	vkEngine::PShader shader{};
 
-	MaterialPipeline pipeline;
-	pipeline.mHandle = mPipelineBuilder.BuildComputePipeline(context);
+	shader.AddMacro("WORKGROUP_SIZE", std::to_string(createInfo.WorkGroupSize));
+	shader.AddMacro("SHADING_TOLERENCE", std::to_string(static_cast<double>(createInfo.ShadingTolerence)));
+	shader.AddMacro("TOLERENCE", std::to_string(static_cast<double>(createInfo.IntersectionTolerence)));
+	shader.AddMacro("EPSILON", std::to_string(static_cast<double>(FLT_EPSILON)));
+	shader.AddMacro("POWER_HEURISTICS_EXP", std::to_string(static_cast<double>(createInfo.PowerHeuristics)));
+	shader.AddMacro("EMPTY_MATERIAL_ID", std::to_string(static_cast<int>(-1)));
+	shader.AddMacro("SKYBOX_MATERIAL_ID", std::to_string(static_cast<int>(-2)));
+	shader.AddMacro("LIGHT_MATERIAL_ID", std::to_string(static_cast<int>(-3)));
+	shader.AddMacro("RR_CUTOFF_CONST", std::to_string(static_cast<int>(-4)));
 
-	return pipeline;
+	vkEngine::OptimizerFlag flag = vkEngine::OptimizerFlag::eO3;
+
+	shader.SetShader("eCompute", createInfo.ShaderCode, flag);
+
+	auto Errors = shader.CompileShaders();
+
+	CompileErrorChecker checker("Logging/ShaderFails/Shader.glsl");
+	checker.AssertOnError(Errors);
+
+	return mPipelineBuilder.BuildComputePipeline<MaterialPipeline>(shader);
 }
 
 AQUA_NAMESPACE::PH_FLUX_NAMESPACE::Executor AQUA_NAMESPACE::PH_FLUX_NAMESPACE::WavefrontEstimator::
@@ -68,46 +81,6 @@ AQUA_NAMESPACE::PH_FLUX_NAMESPACE::Executor AQUA_NAMESPACE::PH_FLUX_NAMESPACE::W
 AQUA_NAMESPACE::PH_FLUX_NAMESPACE::ExecutionPipelines AQUA_NAMESPACE::PH_FLUX_NAMESPACE::
 	WavefrontEstimator::CreatePipelines()
 {
-	ExecutionPipelines pipelines;
-
-	pipelines.SortRecorder = std::make_shared<SortRecorder<uint32_t>>(mPipelineBuilder, mMemoryManager);
-
-	*pipelines.SortRecorder = *mPipelineContexts.SortRecorder;
-
-	//mRayRefs = mPipelineResources.SortRecorder->GetBuffer();
-
-	pipelines.RayGenerator = mPipelineBuilder.BuildComputePipeline
-		<RayGenerationPipelineContext>(mPipelineContexts.RayGeneratorContext);
-
-	pipelines.IntersectionPipeline = mPipelineBuilder.BuildComputePipeline
-		<IntersectionPipelineContext>(mPipelineContexts.IntersectionContext);
-
-	pipelines.RaySortPreparer = mPipelineBuilder.BuildComputePipeline
-		<RaySortEpilogue>(mPipelineContexts.SortEpiloguePreparer);
-
-	pipelines.RaySortFinisher = mPipelineBuilder.BuildComputePipeline
-		<RaySortEpilogue>(mPipelineContexts.SortEpilogueFinisher);
-
-	pipelines.RayRefCounter = mPipelineBuilder.BuildComputePipeline
-		<RayRefCounterContext>(mPipelineContexts.RayRefCounter);
-
-	pipelines.PrefixSummer = mPipelineBuilder.BuildComputePipeline
-		<PrefixSumContext>(mPipelineContexts.PrefixSummerContext);
-
-	pipelines.InactiveRayShader.mHandle = mPipelineBuilder.BuildComputePipeline
-		<MaterialPipelineContext>(mPipelineContexts.InactiveRayShaderContext);
-
-	pipelines.LuminanceMean = mPipelineBuilder.BuildComputePipeline
-		<LuminanceMeanContext>(mPipelineContexts.LuminanceMeanCalculatorContext);
-
-	pipelines.PostProcessor = mPipelineBuilder.BuildComputePipeline
-		<PostProcessImageContext>(mPipelineContexts.PostProcessorContext);
-
-	return pipelines;
-}
-
-void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::WavefrontEstimator::InitializePipelineContexts()
-{
 	MaterialCreateInfo inactiveMaterialInfo{};
 	inactiveMaterialInfo.PowerHeuristics = 2.0f;
 	inactiveMaterialInfo.ShadingTolerence = 0.001f;
@@ -119,74 +92,77 @@ void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::WavefrontEstimator::InitializePipelineCo
 
 	inactiveMaterialInfo.ShaderCode = StitchFrontAndBackShaders(emptyShader);
 
-	mPipelineContexts.SortRecorder = std::make_shared<SortRecorder<uint32_t>>(mPipelineBuilder, mMemoryManager);
+	ExecutionPipelines pipelines;
 
-	mPipelineContexts.SortRecorder->CompileSorterPipeline(mCreateInfo.IntersectionWorkgroupSize);
-	mPipelineContexts.SortRecorder->ResizeBuffer(256);
+	pipelines.SortRecorder = std::make_shared<SortRecorder<uint32_t>>(mPipelineBuilder, mResourcePool);
 
-	mPipelineContexts.RayGeneratorContext.Prepare(mCreateInfo.IntersectionWorkgroupSize);
-	mPipelineContexts.IntersectionContext.Prepare(mCreateInfo.IntersectionWorkgroupSize, mCreateInfo.Tolerence);
-	mPipelineContexts.SortEpiloguePreparer.Prepare(mCreateInfo.IntersectionWorkgroupSize, RaySortEvent::ePrepare);
-	mPipelineContexts.SortEpilogueFinisher.Prepare(mCreateInfo.IntersectionWorkgroupSize, RaySortEvent::eFinish);
-	mPipelineContexts.RayRefCounter.Prepare(mCreateInfo.IntersectionWorkgroupSize);
-	mPipelineContexts.PrefixSummerContext.Prepare(mCreateInfo.IntersectionWorkgroupSize);
-	mPipelineContexts.InactiveRayShaderContext.Prepare(inactiveMaterialInfo, mCreateInfo.Tolerence);
-	mPipelineContexts.LuminanceMeanCalculatorContext.Prepare(mCreateInfo.IntersectionWorkgroupSize);
-	mPipelineContexts.PostProcessorContext.Prepare(mCreateInfo.RayGenWorkgroupSize);
+	//mRayRefs = mPipelineResources.SortRecorder->GetBuffer();
+
+	pipelines.RayGenerator = mPipelineBuilder.BuildComputePipeline<RayGenerationPipeline>(GetRayGenerationShader());
+	pipelines.IntersectionPipeline = mPipelineBuilder.BuildComputePipeline<IntersectionPipeline>(GetIntersectionShader());
+	pipelines.RaySortPreparer = mPipelineBuilder.BuildComputePipeline<RaySortEpiloguePipeline>(GetRaySortEpilogueShader(RaySortEvent::ePrepare));
+	pipelines.RaySortFinisher = mPipelineBuilder.BuildComputePipeline<RaySortEpiloguePipeline>(GetRaySortEpilogueShader(RaySortEvent::eFinish));
+	pipelines.RayRefCounter = mPipelineBuilder.BuildComputePipeline<RayRefCounterPipeline>(GetRayRefCounterShader());
+	pipelines.PrefixSummer = mPipelineBuilder.BuildComputePipeline<PrefixSumPipeline>(GetPrefixSumShader());
+	pipelines.InactiveRayShader = CreateMaterialPipeline(inactiveMaterialInfo);
+	pipelines.LuminanceMean = mPipelineBuilder.BuildComputePipeline<LuminanceMeanPipeline>(GetLuminanceMeanShader());
+	pipelines.PostProcessor = mPipelineBuilder.BuildComputePipeline<PostProcessImagePipeline>(GetPostProcessImageShader());
+
+	return pipelines;
 }
 
 void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::WavefrontEstimator::CreateTraceBuffers(SessionInfo& session)
 {
-	vkEngine::BufferCreateInfo createInfo{};
-	createInfo.Usage = vk::BufferUsageFlagBits::eStorageBuffer;
-	createInfo.MemProps = vk::MemoryPropertyFlagBits::eHostCoherent;
+	vk::BufferUsageFlags usage = vk::BufferUsageFlagBits::eStorageBuffer;
+	vk::MemoryPropertyFlags memProps = vk::MemoryPropertyFlagBits::eHostCoherent;
 
-	session.SharedBuffers.Vertices = mMemoryManager.CreateBuffer<glm::vec4>(createInfo);
-	session.SharedBuffers.Faces = mMemoryManager.CreateBuffer<Face>(createInfo);
-	session.SharedBuffers.TexCoords = mMemoryManager.CreateBuffer<glm::vec2>(createInfo);
-	session.SharedBuffers.Normals = mMemoryManager.CreateBuffer<glm::vec4>(createInfo);
-	session.SharedBuffers.Nodes = mMemoryManager.CreateBuffer<Node>(createInfo);
+	session.SharedBuffers.Vertices = mResourcePool.CreateBuffer<glm::vec4>(usage, memProps);
+	session.SharedBuffers.Faces = mResourcePool.CreateBuffer<Face>(usage, memProps);
+	session.SharedBuffers.TexCoords = mResourcePool.CreateBuffer<glm::vec2>(usage, memProps);
+	session.SharedBuffers.Normals = mResourcePool.CreateBuffer<glm::vec4>(usage, memProps);
+	session.SharedBuffers.Nodes = mResourcePool.CreateBuffer<Node>(usage, memProps);
 
-	session.MeshInfos = mMemoryManager.CreateBuffer<MeshInfo>(createInfo);
-	session.LightInfos = mMemoryManager.CreateBuffer<LightInfo>(createInfo);
-	session.LightPropsInfos = mMemoryManager.CreateBuffer<LightProperties>(createInfo);
+	session.MeshInfos = mResourcePool.CreateBuffer<MeshInfo>(usage, memProps);
+	session.LightInfos = mResourcePool.CreateBuffer<LightInfo>(usage, memProps);
+	session.LightPropsInfos = mResourcePool.CreateBuffer<LightProperties>(usage, memProps);
 
-	createInfo.MemProps = vk::MemoryPropertyFlagBits::eDeviceLocal;
+	memProps = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
-	session.LocalBuffers.Vertices = mMemoryManager.CreateBuffer<glm::vec4>(createInfo);
-	session.LocalBuffers.Faces = mMemoryManager.CreateBuffer<Face>(createInfo);
-	session.LocalBuffers.TexCoords = mMemoryManager.CreateBuffer<glm::vec2>(createInfo);
-	session.LocalBuffers.Normals = mMemoryManager.CreateBuffer<glm::vec4>(createInfo);
-	session.LocalBuffers.Nodes = mMemoryManager.CreateBuffer<Node>(createInfo);
+	session.LocalBuffers.Vertices = mResourcePool.CreateBuffer<glm::vec4>(usage, memProps);
+	session.LocalBuffers.Faces = mResourcePool.CreateBuffer<Face>(usage, memProps);
+	session.LocalBuffers.TexCoords = mResourcePool.CreateBuffer<glm::vec2>(usage, memProps);
+	session.LocalBuffers.Normals = mResourcePool.CreateBuffer<glm::vec4>(usage, memProps);
+	session.LocalBuffers.Nodes = mResourcePool.CreateBuffer<Node>(usage, memProps);
 
 	// SceneInfo and physical camera buffer is a uniform and should be host coherent...
-	createInfo.Usage = vk::BufferUsageFlagBits::eUniformBuffer;
-	createInfo.MemProps = vk::MemoryPropertyFlagBits::eHostCoherent;
+	usage = vk::BufferUsageFlagBits::eUniformBuffer;
+	memProps = vk::MemoryPropertyFlagBits::eHostCoherent;
 
 	// Intersection stage...
-	session.CameraSpecsBuffer = mMemoryManager.CreateBuffer<PhysicalCamera>(createInfo);
+	session.CameraSpecsBuffer = mResourcePool.CreateBuffer<PhysicalCamera>(usage, memProps);
+	session.ShaderConstData = mResourcePool.CreateBuffer<ShaderData>(usage, memProps);
 }
 
 void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::WavefrontEstimator::CreateExecutorBuffers(
 	ExecutionInfo& executionInfo, const ExecutorCreateInfo& executorInfo)
 {
+	vk::BufferUsageFlags usage = vk::BufferUsageFlagBits::eStorageBuffer;
+	vk::MemoryPropertyFlags memProps = vk::MemoryPropertyFlagBits::eDeviceLocal;
+
 	// TODO: Making them host coherent for now... But they really should be
 	// local buffers in the final build...
 
 	executionInfo.PipelineResources.SortRecorder->ResizeBuffer(2 * executorInfo.TileSize.x * executorInfo.TileSize.y);
 	executionInfo.RayRefs = executionInfo.PipelineResources.SortRecorder->GetBuffer();
 
-	vkEngine::BufferCreateInfo createInfo{};
-	createInfo.Usage = vk::BufferUsageFlagBits::eStorageBuffer;
-	createInfo.MemProps = vk::MemoryPropertyFlagBits::eDeviceLocal;
 	//createInfo.MemProps = vk::MemoryPropertyFlagBits::eHostCoherent;
 	// TODO: --^ Not necessary, in fact bad for performance
 
-	executionInfo.Rays = mMemoryManager.CreateBuffer<Ray>(createInfo);
-	executionInfo.RayInfos = mMemoryManager.CreateBuffer<RayInfo>(createInfo);
-	executionInfo.CollisionInfos = mMemoryManager.CreateBuffer<CollisionInfo>(createInfo);
+	executionInfo.Rays = mResourcePool.CreateBuffer<Ray>(usage, memProps);
+	executionInfo.RayInfos = mResourcePool.CreateBuffer<RayInfo>(usage, memProps);
+	executionInfo.CollisionInfos = mResourcePool.CreateBuffer<CollisionInfo>(usage, memProps);
 
-	executionInfo.RefCounts = mMemoryManager.CreateBuffer<uint32_t>(createInfo);
+	executionInfo.RefCounts = mResourcePool.CreateBuffer<uint32_t>(usage, memProps);
 
 	uint32_t RayCount = executorInfo.TargetResolution.x * executorInfo.TargetResolution.y;
 
@@ -194,10 +170,10 @@ void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::WavefrontEstimator::CreateExecutorBuffer
 	executionInfo.RayInfos.Resize(2 * RayCount);
 	executionInfo.CollisionInfos.Resize(2 * RayCount);
 
-	createInfo.Usage = vk::BufferUsageFlagBits::eUniformBuffer;
-	createInfo.MemProps = vk::MemoryPropertyFlagBits::eHostCoherent;
+	usage = vk::BufferUsageFlagBits::eUniformBuffer;
+	memProps = vk::MemoryPropertyFlagBits::eHostCoherent;
 
-	executionInfo.Scene = mMemoryManager.CreateBuffer<WavefrontSceneInfo>(createInfo);
+	executionInfo.Scene = mResourcePool.CreateBuffer<WavefrontSceneInfo>(usage, memProps);
 }
 
 void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::WavefrontEstimator::CreateExecutorImages(
@@ -210,11 +186,11 @@ void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::WavefrontEstimator::CreateExecutorImages
 	imageInfo.Type = vk::ImageType::e2D;
 	imageInfo.Usage = vk::ImageUsageFlagBits::eStorage;
 
-	executionInfo.Target.PixelMean = mMemoryManager.CreateImage(imageInfo);
-	executionInfo.Target.PixelVariance = mMemoryManager.CreateImage(imageInfo);
+	executionInfo.Target.PixelMean = mResourcePool.CreateImage(imageInfo);
+	executionInfo.Target.PixelVariance = mResourcePool.CreateImage(imageInfo);
 
 	imageInfo.Format = vk::Format::eR8G8B8A8Snorm;
-	executionInfo.Target.Presentable = mMemoryManager.CreateImage(imageInfo);
+	executionInfo.Target.Presentable = mResourcePool.CreateImage(imageInfo);
 
 	executionInfo.Target.ImageResolution = executorInfo.TargetResolution;
 
@@ -241,11 +217,11 @@ void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::WavefrontEstimator::RetrieveFrontAndBack
 	mShaderFrontEnd = "#version 440\n\n";
 
 	// All the front shaders and custom libraries...
-	AddText(mShaderFrontEnd, ::AQUA_NAMESPACE::GetShaderDirectory() + "Wavefront/Common.glsl");
-	AddText(mShaderFrontEnd, ::AQUA_NAMESPACE::GetShaderDirectory() + "BSDFs/CommonBSDF.glsl");
-	AddText(mShaderFrontEnd, ::AQUA_NAMESPACE::GetShaderDirectory() + "BSDFs/BSDF_Samplers.glsl");
-	AddText(mShaderFrontEnd, ::AQUA_NAMESPACE::GetShaderDirectory() + "MaterialShaders/ShaderFrontEnd.glsl");
-	AddText(mShaderFrontEnd, ::AQUA_NAMESPACE::GetShaderDirectory() + "BSDFs/Utils.glsl");
+	AddText(mShaderFrontEnd, GetShaderDirectory() + "Wavefront/Common.glsl");
+	AddText(mShaderFrontEnd, GetShaderDirectory() + "BSDFs/CommonBSDF.glsl");
+	AddText(mShaderFrontEnd, GetShaderDirectory() + "BSDFs/BSDF_Samplers.glsl");
+	AddText(mShaderFrontEnd, GetShaderDirectory() + "MaterialShaders/ShaderFrontEnd.glsl");
+	AddText(mShaderFrontEnd, GetShaderDirectory() + "BSDFs/Utils.glsl");
 
 	/* TODO: This is temporary, should be dealt by an import system */
 
@@ -256,17 +232,17 @@ void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::WavefrontEstimator::RetrieveFrontAndBack
 	AddText(mShaderFrontEnd, "Shaders/BSDFs/CookTorranceBSDF.glsl");
 	AddText(mShaderFrontEnd, "Shaders/BSDFs/GlassBSDF.glsl");
 #else
-	AddText(mImportToShaders["DiffuseBSDF"], ::AQUA_NAMESPACE::GetShaderDirectory() + "BSDFs/DiffuseBSDF.glsl");
-	AddText(mImportToShaders["GlossyBSDF"], ::AQUA_NAMESPACE::GetShaderDirectory() + "BSDFs/GlossyBSDF.glsl");
-	AddText(mImportToShaders["RefractionBSDF"], ::AQUA_NAMESPACE::GetShaderDirectory() + "BSDFs/RefractionBSDF.glsl");
-	AddText(mImportToShaders["CookTorranceBSDF"], ::AQUA_NAMESPACE::GetShaderDirectory() + "BSDFs/CookTorranceBSDF.glsl");
-	AddText(mImportToShaders["GlassBSDF"], ::AQUA_NAMESPACE::GetShaderDirectory() + "BSDFs/GlassBSDF.glsl");
+	AddText(mImportToShaders["DiffuseBSDF"], GetShaderDirectory() + "BSDFs/DiffuseBSDF.glsl");
+	AddText(mImportToShaders["GlossyBSDF"], GetShaderDirectory() + "BSDFs/GlossyBSDF.glsl");
+	AddText(mImportToShaders["RefractionBSDF"], GetShaderDirectory() + "BSDFs/RefractionBSDF.glsl");
+	AddText(mImportToShaders["CookTorranceBSDF"], GetShaderDirectory() + "BSDFs/CookTorranceBSDF.glsl");
+	AddText(mImportToShaders["GlassBSDF"], GetShaderDirectory() + "BSDFs/GlassBSDF.glsl");
 #endif
 
 	/****************************************************************/
 
 	// Backend of the pipelines handling luminance calculations
-	AddText(mShaderBackEnd, ::AQUA_NAMESPACE::GetShaderDirectory() + "MaterialShaders/ShaderBackEnd.glsl");
+	AddText(mShaderBackEnd, GetShaderDirectory() + "MaterialShaders/ShaderBackEnd.glsl");
 }
 
 void DispatchErrorMessage(AQUA_NAMESPACE::PH_FLUX_NAMESPACE::MaterialShaderError error)
@@ -313,6 +289,157 @@ std::string AQUA_NAMESPACE::PH_FLUX_NAMESPACE::WavefrontEstimator::StitchFrontAn
 	pipelineCode += mShaderBackEnd;
 
 	return pipelineCode;
+}
+
+vkEngine::PShader AQUA_NAMESPACE::PH_FLUX_NAMESPACE::WavefrontEstimator::GetRayGenerationShader()
+{
+	vkEngine::PShader shader{};
+
+	shader.AddMacro("WORKGROUP_SIZE", std::to_string(mCreateInfo.RayGenWorkgroupSize.x));
+
+	shader.SetFilepath("eCompute", GetShaderDirectory() + "Wavefront/RayGeneration.comp", vkEngine::OptimizerFlag::eO3);
+
+	auto Errors = shader.CompileShaders();
+
+	CompileErrorChecker checker("Logging/ShaderFails/Shader.glsl");
+	checker.AssertOnError(Errors);
+
+	return shader;
+}
+
+vkEngine::PShader AQUA_NAMESPACE::PH_FLUX_NAMESPACE::WavefrontEstimator::GetIntersectionShader()
+{
+	vkEngine::PShader shader;
+
+	shader.AddMacro("WORKGROUP_SIZE", std::to_string(mCreateInfo.IntersectionWorkgroupSize));
+	shader.AddMacro("TOLERENCE", std::to_string(mCreateInfo.Tolerence));
+	shader.AddMacro("MAX_DIS", std::to_string(FLT_MAX));
+	shader.AddMacro("FLT_MAX", std::to_string(FLT_MAX));
+
+	shader.SetFilepath("eCompute", GetShaderDirectory() + "Wavefront/Intersection.glsl",
+		OPTIMIZE_INTERSECTION == 1 ?
+		vkEngine::OptimizerFlag::eO3 : vkEngine::OptimizerFlag::eNone);
+
+	auto Errors = shader.CompileShaders();
+
+	CompileErrorChecker checker("../vkEngineTester/Logging/ShaderFails/Shader.glsl");
+
+	auto ErrorInfos = checker.GetErrors(Errors);
+	checker.AssertOnError(ErrorInfos);
+
+	return shader;
+}
+
+vkEngine::PShader AQUA_NAMESPACE::PH_FLUX_NAMESPACE::WavefrontEstimator::GetRaySortEpilogueShader(RaySortEvent sortEvent)
+{
+	vkEngine::PShader shader;
+
+	shader.AddMacro("WORKGROUP_SIZE", std::to_string(mCreateInfo.IntersectionWorkgroupSize));
+
+	std::string shaderPath;
+
+	switch (sortEvent)
+	{
+		case RaySortEvent::ePrepare:
+			shaderPath = GetShaderDirectory() + "Wavefront/PrepareRaySort.glsl";
+			break;
+		case RaySortEvent::eFinish:
+			shaderPath = GetShaderDirectory() + "Wavefront/FinishRaySort.glsl";
+			break;
+		default:
+			break;
+	}
+
+	shader.SetFilepath("eCompute", shaderPath);
+
+	auto Errors = shader.CompileShaders();
+
+	CompileErrorChecker checker("../vkEngineTester/Logging/ShaderFails/Shader.glsl");
+
+	auto ErrorInfos = checker.GetErrors(Errors);
+	checker.AssertOnError(ErrorInfos);
+
+	return shader;
+}
+
+vkEngine::PShader AQUA_NAMESPACE::PH_FLUX_NAMESPACE::WavefrontEstimator::GetRayRefCounterShader()
+{
+	vkEngine::PShader shader;
+
+	shader.AddMacro("WORKGROUP_SIZE", std::to_string(mCreateInfo.IntersectionWorkgroupSize));
+	shader.AddMacro("PRIMITIVE_TYPE", "uint");
+
+	shader.SetFilepath("eCompute", GetShaderDirectory() + "Utils/CountElements.glsl");
+
+	auto Errors = shader.CompileShaders();
+
+	CompileErrorChecker checker("../vkEngineTester/Logging/ShaderFails/Shader.glsl");
+
+	auto ErrorInfos = checker.GetErrors(Errors);
+	checker.AssertOnError(ErrorInfos);
+
+	return shader;
+}
+
+vkEngine::PShader AQUA_NAMESPACE::PH_FLUX_NAMESPACE::WavefrontEstimator::GetPrefixSumShader()
+{
+	vkEngine::PShader shader;
+
+	shader.AddMacro("WORKGROUP_SIZE", std::to_string(mCreateInfo.IntersectionWorkgroupSize));
+	shader.SetFilepath("eCompute", GetShaderDirectory() + "Utils/PrefixSum.glsl");
+	
+	auto Errors = shader.CompileShaders();
+
+	CompileErrorChecker checker("Logging/ShaderFails/Shader.glsl");
+
+	auto ErrorInfos = checker.GetErrors(Errors);
+	checker.AssertOnError(ErrorInfos);
+
+	return shader;
+}
+
+vkEngine::PShader AQUA_NAMESPACE::PH_FLUX_NAMESPACE::WavefrontEstimator::GetLuminanceMeanShader()
+{
+	vkEngine::PShader shader;
+
+	shader.AddMacro("WORKGROUP_SIZE", std::to_string(mCreateInfo.IntersectionWorkgroupSize));
+	shader.SetFilepath("eCompute", GetShaderDirectory() + "Wavefront/LuminanceMean.glsl");
+	
+	auto Errors = shader.CompileShaders();
+
+	CompileErrorChecker checker("Logging/ShaderFails/Shader.glsl");
+
+	auto ErrorInfos = checker.GetErrors(Errors);
+	checker.AssertOnError(ErrorInfos);
+
+	return shader;
+}
+
+vkEngine::PShader AQUA_NAMESPACE::PH_FLUX_NAMESPACE::WavefrontEstimator::GetPostProcessImageShader()
+{
+	vkEngine::PShader shader;
+
+	shader.AddMacro("WORKGROUP_SIZE_X", std::to_string(mCreateInfo.RayGenWorkgroupSize.x));
+	shader.AddMacro("WORKGROUP_SIZE_Y", std::to_string(mCreateInfo.RayGenWorkgroupSize.y));
+
+	shader.AddMacro("APPLY_TONE_MAP", std::to_string(static_cast<uint32_t>(PostProcessFlagBits::eToneMap)));
+
+	shader.AddMacro("APPLY_GAMMA_CORRECTION",
+		std::to_string(static_cast<uint32_t>(PostProcessFlagBits::eGammaCorrection)));
+
+	shader.AddMacro("APPLY_GAMMA_CORRECTION_INV",
+		std::to_string(static_cast<uint32_t>(PostProcessFlagBits::eGammaCorrectionInv)));
+
+	shader.SetFilepath("eCompute", GetShaderDirectory() + "Wavefront/PostProcessImage.glsl");
+
+	auto Errors = shader.CompileShaders();
+
+	CompileErrorChecker checker("../vkEngineTester/Logging/ShaderFails/Shader.glsl");
+
+	auto ErrorInfos = checker.GetErrors(Errors);
+	checker.AssertOnError(ErrorInfos);
+
+	return shader;
 }
 
 AQUA_NAMESPACE::PH_FLUX_NAMESPACE::MaterialShaderError AQUA_NAMESPACE::PH_FLUX_NAMESPACE::

@@ -1,3 +1,4 @@
+#include "Core/Aqpch.h"
 #include "Geometry3D/MeshLoader.h"
 
 AQUA_BEGIN
@@ -46,6 +47,7 @@ AQUA_NAMESPACE::Geometry3D AQUA_NAMESPACE::MeshLoader::LoadModel(const std::stri
 
 	importer.SetPropertyFloat(AI_CONFIG_PP_GSN_MAX_SMOOTHING_ANGLE, 85.0f);
 
+	// TODO: For now, we're only allowing triangles as the primitive faces
 	const aiScene* scene = importer.ReadFile(filepath, mConfig.PostProcessFlag | aiProcess_Triangulate);
 
 	if (!scene)

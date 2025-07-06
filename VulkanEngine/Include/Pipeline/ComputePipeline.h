@@ -1,22 +1,25 @@
 #pragma once
 #include "PipelineConfig.h"
-#include "ComputeContext.h"
+#include "PShader.h"
 #include "BasicPipeline.h"
 
 #include "../Core/Logger.h"
 
 VK_BEGIN
 
-template <typename PipelineContextType, typename BasePipeline = BasicPipeline<PipelineContextType>>
-class ComputePipeline : public BasePipeline
+struct ComputePipelineHandles : public PipelineHandles, public PipelineInfo
+{
+	glm::uvec3 WorkGroupSize = { 0, 0, 0 }; // By default, invalid workgroup
+};
+
+template <typename BasePipeline>
+class BasicComputePipeline : public BasePipeline
 {
 public:
-	using MyContext = typename BasePipeline::MyContext;
+	BasicComputePipeline() = default;
+	virtual ~BasicComputePipeline() = default;
 
-public:
-	ComputePipeline() = default;
-
-	void Begin(vk::CommandBuffer commandBuffer);
+	virtual void Begin(vk::CommandBuffer commandBuffer);
 
 	// Binds the pipeline to a compute bind point
 	// In contrast to graphics pipeline, compute pipeline might be dispatched
@@ -30,32 +33,42 @@ public:
 	// Async Dispatch...
 	void Dispatch(const glm::uvec3& workGroups);
 
-	void End();
+	virtual void End();
 
-	explicit operator bool() const { return static_cast<bool>(mPipelineHandles); }
+	virtual const PShader& GetShader() const override { return mShader; }
+
+	glm::uvec3 GetWorkGroupSize() const { return mHandles->WorkGroupSize; }
+
+	explicit operator bool() const { return static_cast<bool>(mHandles); }
 
 private:
-	Core::Ref<ComputePipelineHandles> mPipelineHandles;
+	Core::Ref<ComputePipelineHandles> mHandles;
+	vkEngine::PShader mShader;
+
+protected:
+	void SetShader(const PShader& shader) { mShader = shader; }
 
 	friend class PipelineBuilder;
 };
 
-template<typename PipelineContextType, typename BasePipeline>
-inline void ComputePipeline<PipelineContextType, BasePipeline>::Begin(vk::CommandBuffer commandBuffer)
+using ComputePipeline = BasicComputePipeline<BasicPipeline>;
+
+template<typename BasePipeline>
+inline void BasicComputePipeline<BasePipeline>::Begin(vk::CommandBuffer commandBuffer)
 {
 	this->BeginPipeline(commandBuffer);
 }
 
-template<typename PipelineContextType, typename BasePipeline>
-inline void ComputePipeline<PipelineContextType, BasePipeline>::BindPipeline()
+template<typename BasePipeline>
+inline void BasicComputePipeline<BasePipeline>::BindPipeline()
 {
 	vk::CommandBuffer commandBuffer = ((BasePipeline*) this)->GetCommandBuffer();
-	commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, mPipelineHandles->Handle);
+	commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, mHandles->Handle);
 }
 
-template<typename PipelineContextType, typename BasePipeline>
+template<typename BasePipeline>
 template<typename T>
-inline void ComputePipeline<PipelineContextType, BasePipeline>::SetShaderConstant(
+inline void BasicComputePipeline<BasePipeline>::SetShaderConstant(
 	const std::string& name, const T& constant)
 {
 	_VK_ASSERT(this->GetPipelineState() == PipelineState::eRecording,
@@ -63,9 +76,7 @@ inline void ComputePipeline<PipelineContextType, BasePipeline>::SetShaderConstan
 
 	vk::CommandBuffer commandBuffer = this->GetCommandBuffer();
 
-	MyContext& Context = this->GetPipelineContext();
-
-	const PushConstantSubrangeInfos& subranges = Context.GetPushConstantSubranges();
+	const PushConstantSubrangeInfos& subranges = GetShader().GetPushConstantSubranges();
 
 	_VK_ASSERT(subranges.find(name) != subranges.end(),
 		"Failed to find the push constant field \"" << name << "\" in the shader source code\n"
@@ -83,29 +94,24 @@ inline void ComputePipeline<PipelineContextType, BasePipeline>::SetShaderConstan
 		"* The constant has been optimized away in the shader\n"
 	);
 
-	commandBuffer.pushConstants(mPipelineHandles->LayoutData.Layout, range.stageFlags,
+	commandBuffer.pushConstants(mHandles->LayoutData.Layout, range.stageFlags,
 		range.offset, range.size, reinterpret_cast<const void*>(&constant));
 }
 
-template<typename PipelineContextType, typename BasePipeline>
-inline void ComputePipeline<PipelineContextType, BasePipeline>::Dispatch(const glm::uvec3& WorkGroups)
+template<typename BasePipeline>
+inline void BasicComputePipeline<BasePipeline>::Dispatch(const glm::uvec3& WorkGroups)
 {
 	vk::CommandBuffer commandBuffer = ((BasePipeline*) this)->GetCommandBuffer();
 
-	// TODO: might be a good idea to bind the pipeline every time before dispatching...
-	// Or the headache for binding the pipeline may be left on the client
-	// Haven't decided yet
-	// commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, mPipelineHandles->Handle);
-
-	if (!mPipelineHandles->SetCache.empty())
+	if (!mHandles->SetCache.empty())
 		commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute,
-			mPipelineHandles->LayoutData.Layout, 0, mPipelineHandles->SetCache, nullptr);
+			mHandles->LayoutData.Layout, 0, mHandles->SetCache, nullptr);
 
 	commandBuffer.dispatch(WorkGroups.x, WorkGroups.y, WorkGroups.z);
 }
 
-template<typename PipelineContextType, typename BasePipeline>
-inline void ComputePipeline<PipelineContextType, BasePipeline>::End()
+template<typename BasePipeline>
+inline void BasicComputePipeline<BasePipeline>::End()
 {
 	this->EndPipeline();
 }

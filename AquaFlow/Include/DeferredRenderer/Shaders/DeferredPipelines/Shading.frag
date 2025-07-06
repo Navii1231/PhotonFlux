@@ -1,6 +1,14 @@
+// Shading Pipeline example
 #version 440 core
 
 layout(location = 0) out vec4 FragColor;
+
+layout(set = 0, binding = 0) uniform sampler2D uPositions;
+layout(set = 0, binding = 1) uniform sampler2D uNormals;
+layout(set = 0, binding = 2) uniform sampler2D uTangents;
+layout(set = 0, binding = 3) uniform sampler2D uBitangents;
+layout(set = 0, binding = 4) uniform sampler2D uTexCoords;
+layout(set = 0, binding = 5) uniform sampler2D uMaterialIDs;
 
 struct Material
 {
@@ -35,6 +43,24 @@ struct CookTorranceBSDF_Input
     vec3 LightDir;
     float RefractiveIndex;
 };
+
+layout(std430, set = 1, binding = 0) buffer MaterialBuffer
+{
+	Material sMaterials[];
+};
+
+layout(std430, set = 1, binding = 1) buffer DirectionalLights
+{
+    DirectionalLightSrc sDirectionalLightSrc[];
+};
+
+layout(std140, set = 1, binding = 2) uniform Camera
+{
+    mat4 uProjection;
+	mat4 uView;
+};
+
+layout(location = 0) in vec2 vTexCoords;
 
 vec3 FresnelSchlick(float HdotV, in vec3 Reflectivity)
 {
@@ -123,31 +149,6 @@ vec3 CookTorranceBRDF(in CookTorranceBSDF_Input bsdfInput)
 
 	return Lo;
 }
-
-layout(set = 0, binding = 0) uniform sampler2D uPositions;
-layout(set = 0, binding = 1) uniform sampler2D uNormals;
-layout(set = 0, binding = 2) uniform sampler2D uTangents;
-layout(set = 0, binding = 3) uniform sampler2D uBitangents;
-layout(set = 0, binding = 4) uniform sampler2D uTexCoords;
-layout(set = 0, binding = 5) uniform sampler2D uMaterialIDs;
-
-layout(std430, set = 1, binding = 0) buffer MaterialBuffer
-{
-	Material sMaterials[];
-};
-
-layout(std430, set = 1, binding = 1) buffer DirectionalLights
-{
-    DirectionalLightSrc sDirectionalLightSrc[];
-};
-
-layout(std140, set = 1, binding = 2) uniform Camera
-{
-    mat4 uProjection;
-	mat4 uView;
-};
-
-layout(location = 0) in vec2 vTexCoords;
 
 void main()
 {

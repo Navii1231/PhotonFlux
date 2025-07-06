@@ -1,6 +1,6 @@
 #pragma once
 #include "../Config.h"
-#include "../../Device/DeviceConfig.h"
+#include "../../Device/ContextConfig.h"
 #include "../../Device/PhysicalDevice.h"
 
 #include <unordered_set>
@@ -10,7 +10,7 @@ VK_CORE_BEGIN
 VK_UTILS_BEGIN
 
 // Device...
-vk::Device CreateDevice(const DeviceCreateInfo& createInfo);
+vk::Device CreateDevice(const ContextCreateInfo& createInfo);
 
 template <typename VulkanFlagBits>
 std::set<VulkanFlagBits> BreakIntoIndividualFlagBits(vk::Flags<VulkanFlagBits> flags)

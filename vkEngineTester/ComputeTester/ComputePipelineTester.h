@@ -1,14 +1,11 @@
 #pragma once
 #include "../Application/Application.h"
-#include "../GraphicsTester/RayVisualizerContext.h"
 #include "SampleGenerationTester.h"
 #include "../PhotonFlux/ComputeEstimator.h"
 #include "Wavefront/LocalRadixSortPipeline.h"
 #include "Wavefront/SortRecorder.h"
 
 #include "Wavefront/MergeSorterPipeline.h"
-
-#include "../GraphicsTester/RayVisualizerContext.h"
 
 #include "Utils/EditorCamera.h"
 
@@ -34,12 +31,11 @@ private:
 	AquaFlow::PhFlux::LocalRadixSortPipeline mPrefixSummer;
 
 	// Executor...
-	std::shared_ptr<const vkEngine::QueueManager> mQueueManager;
 	vkEngine::Core::Executor mComputeWorker;
 	vkEngine::Core::Executor mGraphicsWorker;
 
 	// Resource allocators...
-	vkEngine::MemoryResourceManager mMemoryResourceManager;
+	vkEngine::ResourcePool mResourcePool;
 
 	vkEngine::RenderContextBuilder mRenderContextBuilder;
 	vkEngine::RenderTargetContext mRenderContext;
@@ -47,7 +43,6 @@ private:
 
 	PhFlux::CameraData mCameraData;
 
-	RayVisualizePipeline mRayVisualizer;
 	AquaFlow::EditorCamera mVisualizerCamera;
 
 	PhFlux::TraceResult mComputeTraceResult;

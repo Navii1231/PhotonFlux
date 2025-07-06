@@ -1,19 +1,21 @@
 #include "Application.h"
 
+#define ENABLE_VALIDATION   _DEBUG
+
 Application::Application(const ApplicationCreateInfo& info) : mWindow(std::make_unique<WindowsWindow>(info.WindowInfo))
 {
 	_STL_ASSERT(!sApplicationInstance, "Application has already been created!");
 	sApplicationInstance = this;
 
 	std::vector<const char*> extensions =
-#if _DEBUG
+#if ENABLE_VALIDATION
 	{ "VK_EXT_debug_utils" };
 	//{ "VK_EXT_debug_report", "VK_EXT_debug_utils" };
 #else
 	{};
 #endif
 	std::vector<const char*> layers =
-#if _DEBUG
+#if ENABLE_VALIDATION
 	{ "VK_LAYER_KHRONOS_validation" /*"VK_LAYER_NV_GPU_Trace_release_public_2024_1_1"*/
 	/*"VK_LAYER_NV_nomad_release_public_2024_1_1"*/ };
 #else
@@ -35,7 +37,7 @@ Application::Application(const ApplicationCreateInfo& info) : mWindow(std::make_
 
 	mSurface = Surface;
 
-#if _DEBUG
+#if ENABLE_VALIDATION
 	vkEngine::DebugMessengerCreateInfo messengerInfo{};
 
 	messengerInfo.messageType =
@@ -55,13 +57,13 @@ Application::Application(const ApplicationCreateInfo& info) : mWindow(std::make_
 
 	mPhysicalDevices = std::make_shared<vkEngine::PhysicalDeviceMenagerie>(mInstance);
 
-	vkEngine::DeviceCreateInfo deviceInfo{};
+	vkEngine::ContextCreateInfo deviceInfo{};
 
 	deviceInfo.DeviceCapabilities =
 		vk::QueueFlagBits::eGraphics | vk::QueueFlagBits::eCompute |
 		vk::QueueFlagBits::eTransfer | vk::QueueFlagBits::eSparseBinding;
 
-#if _DEBUG
+#if ENABLE_VALIDATION
 	deviceInfo.Layers =
 	{ "VK_LAYER_KHRONOS_validation" };
 	deviceInfo.Extensions =
@@ -82,7 +84,7 @@ Application::Application(const ApplicationCreateInfo& info) : mWindow(std::make_
 
 	try
 	{
-		mDevice = std::make_shared<vkEngine::Device>(deviceInfo);
+		mContext = std::make_shared<vkEngine::Context>(deviceInfo);
 	}
 	catch (vk::SystemError& e)
 	{
@@ -91,7 +93,7 @@ Application::Application(const ApplicationCreateInfo& info) : mWindow(std::make_
 		__debugbreak();
 	}
 
-	mSwapchain = mDevice->GetSwapchain();
+	mSwapchain = mContext->GetSwapchain();
 }
 
 void Application::Run()

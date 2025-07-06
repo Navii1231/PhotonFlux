@@ -1,17 +1,47 @@
 #pragma once
 #include "RayTracingStructures.h"
+#include "../Utils/CompilerErrorChecker.h"
 
 AQUA_BEGIN
 PH_BEGIN
 
-class LocalRadixSortContext : public vkEngine::ComputePipelineContext
+class LocalRadixSortPipeline : public vkEngine::ComputePipeline
 {
 public:
-	LocalRadixSortContext() {}
+	LocalRadixSortPipeline() = default;
 
-	void CompilerShader(uint32_t workGroupSize)
+	LocalRadixSortPipeline(uint32_t workGroupSize) { CompileShader(workGroupSize); }
+
+	void UploadBuffer(const vkEngine::Buffer<uint32_t>& buffer)
+	{
+		mBuffer = buffer;
+	}
+
+	virtual void UpdateDescriptors()
+	{
+		vkEngine::DescriptorWriter& writer = this->GetDescriptorWriter();
+
+		vkEngine::StorageBufferWriteInfo prefixInfo{};
+		prefixInfo.Buffer = mBuffer.GetNativeHandles().Handle;
+
+		writer.Update({ 0, 0, 0 }, prefixInfo);
+	}
+
+	vkEngine::Buffer<uint32_t> GetPrefixBuffers() const { return mBuffer; }
+
+private:
+	vkEngine::Buffer<uint32_t> mBuffer;
+
+	uint32_t mWorkgroupSize = 256;
+
+private:
+	// Helper method...
+
+	void CompileShader(uint32_t workGroupSize)
 	{
 		mWorkgroupSize = workGroupSize;
+
+		vkEngine::PShader shader;
 
 		/*** TODO: Shader source must be hard - coded in the class field! ***/
 
@@ -30,53 +60,21 @@ public:
 
 		// TODO: Assert that the mWorkGroupSize must a multiple of two!
 
-		AddMacro("WORKGROUP_SIZE", std::to_string(mWorkgroupSize));
-		AddMacro("TREE_DEPTH", std::to_string((uint32_t) (glm::log2((float) mWorkgroupSize) + 0.5f)));
-		AddMacro("STRIDE", std::to_string(Stride));
+		shader.AddMacro("WORKGROUP_SIZE", std::to_string(mWorkgroupSize));
+		shader.AddMacro("TREE_DEPTH", std::to_string((uint32_t) (glm::log2((float) mWorkgroupSize) + 0.5f)));
+		shader.AddMacro("STRIDE", std::to_string(Stride));
 
-		// Preparing to compile
-		vkEngine::ShaderInput Input;
-		Input.SrcCode = ShaderBackEnd;
-		Input.OptimizationFlag = vkEngine::OptimizerFlag::eO3;
-		Input.Stage = vk::ShaderStageFlagBits::eCompute;
-
-		// TODO: Setting up the necessary macros before compiling
+		shader.SetShader("eCompute", ShaderBackEnd);
 
 		// Compile the shader
-		auto CompilationResults = CompileShaders({ Input });
+		auto Errors = shader.CompileShaders();
 
-		if (CompilationResults[0].Type != vkEngine::ErrorType::eNone)
-		{
-			vkEngine::WriteFile("D:/Dev/VulkanEngine/vkEngineTester/Logging/ShaderFails/Shader.glsl"
-				, CompilationResults[0].SrcCode);
-			std::cout << CompilationResults[0].Info << std::endl;
+		CompileErrorChecker checker("../vkEngineTester/Logging/ShaderFails/Shader.glsl");
+		auto ErrorInfos = checker.GetErrors(Errors);
 
-			_STL_ASSERT(false, "Failed to compile the prefix sum code!");
-		}
+		this->SetShader(shader);
 	}
-
-	void UploadBuffer(const vkEngine::Buffer<uint32_t>& buffer)
-	{
-		mBuffer = buffer;
-	}
-
-	virtual void UpdateDescriptors(vkEngine::DescriptorWriter& writer)
-	{
-		vkEngine::StorageBufferWriteInfo prefixInfo{};
-		prefixInfo.Buffer = mBuffer.GetNativeHandles().Handle;
-
-		writer.Update({ 0, 0, 0 }, prefixInfo);
-	}
-
-	vkEngine::Buffer<uint32_t> GetPrefixBuffers() const { return mBuffer; }
-
-private:
-	vkEngine::Buffer<uint32_t> mBuffer;
-
-	uint32_t mWorkgroupSize = 256;
 };
-
-using LocalRadixSortPipeline = vkEngine::ComputePipeline<LocalRadixSortContext>;
 
 PH_END
 AQUA_END

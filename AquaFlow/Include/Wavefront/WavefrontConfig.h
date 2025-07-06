@@ -5,9 +5,6 @@
 #include "WavefrontWorkflow.h"
 #include "RayGenerationPipeline.h"
 
-#include <memory>
-#include <unordered_map>
-
 AQUA_BEGIN
 PH_BEGIN
 
@@ -68,7 +65,7 @@ struct SessionInfo
 
 struct WavefrontEstimatorCreateInfo
 {
-	vkEngine::Device Context;
+	vkEngine::Context Context;
 	std::string ShaderDirectory;
 
 	// Work group sizes for pipelines

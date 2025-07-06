@@ -4,30 +4,10 @@
 
 #include "TraceSession.h"
 
-#include <vector>
-#include <memory>
-#include <random>
-
 AQUA_BEGIN
 PH_BEGIN
 
 using MaterialPipelineList = std::vector<MaterialPipeline>;
-
-struct ExecutionPipelineContexts
-{
-	RayGenerationPipelineContext RayGeneratorContext;
-	IntersectionPipelineContext IntersectionContext;
-
-	// Sorting
-	RaySortEpilogue SortEpiloguePreparer;
-	RaySortEpilogue SortEpilogueFinisher;
-	std::shared_ptr<RaySortRecorder> SortRecorder;
-	RayRefCounterContext RayRefCounter;
-	PrefixSumContext PrefixSummerContext;
-	MaterialPipelineContext InactiveRayShaderContext;
-	LuminanceMeanContext LuminanceMeanCalculatorContext;
-	PostProcessImageContext PostProcessorContext;
-};
 
 struct ExecutionPipelines
 {

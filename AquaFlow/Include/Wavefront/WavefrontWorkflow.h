@@ -1,13 +1,13 @@
 #pragma once
 #include "RayTracingStructures.h"
-
 #include "../Utils/CompilerErrorChecker.h"
+
 #include "MergeSorterPipeline.h"
 
 AQUA_BEGIN
 PH_BEGIN
 
-using RayRef = typename MergeSorterPassContext<uint32_t>::ArrayRef;
+using RayRef = typename MergeSorterPass<uint32_t>::ArrayRef;
 using RayRefBuffer = vkEngine::Buffer<RayRef>;
 
 enum class RaySortEvent
@@ -25,15 +25,14 @@ enum class PostProcessFlagBits
 
 using PostProcessFlags = vk::Flags<PostProcessFlagBits>;
 
-struct IntersectionPipelineContext : public vkEngine::ComputePipelineContext
+struct IntersectionPipeline : public vkEngine::ComputePipeline
 {
-	IntersectionPipelineContext() = default;
-
-	void Prepare(uint32_t workGroupSize, float Tolerence);
+	IntersectionPipeline() = default;
+	IntersectionPipeline(const vkEngine::PShader& shader) { this->SetShader(shader); }
 
 	GeometryBuffers GetGeometryBuffers() const { return mGeometryBuffers; }
 
-	virtual void UpdateDescriptors(vkEngine::DescriptorWriter& writer) override;
+	virtual void UpdateDescriptors() override;
 
 // Fields...
 	RayBuffer mRays;
@@ -51,13 +50,12 @@ private:
 	inline void UpdateGeometryBuffers(vkEngine::DescriptorWriter& writer);
 };
 
-struct RaySortEpilogue : public vkEngine::ComputePipelineContext
+struct RaySortEpiloguePipeline : public vkEngine::ComputePipeline
 {
-	RaySortEpilogue() = default;
+	RaySortEpiloguePipeline() = default;
+	RaySortEpiloguePipeline(const vkEngine::PShader& shader) { this->SetShader(shader); }
 
-	void Prepare(uint32_t workGroupSize, RaySortEvent sortEvent);
-
-	virtual void UpdateDescriptors(vkEngine::DescriptorWriter& writer) override;
+	virtual void UpdateDescriptors() override;
 
 // Fields...
 	RayBuffer mRays;
@@ -68,17 +66,14 @@ struct RaySortEpilogue : public vkEngine::ComputePipelineContext
 
 	RaySortEvent mSortingEvent = RaySortEvent::ePrepare;
 
-private:
-	std::string GetFilePath(RaySortEvent sortEvent);
 };
 
-struct RayRefCounterContext : public vkEngine::ComputePipelineContext
+struct RayRefCounterPipeline : public vkEngine::ComputePipeline
 {
-	RayRefCounterContext() = default;
+	RayRefCounterPipeline() = default;
+	RayRefCounterPipeline(const vkEngine::PShader& shader) { this->SetShader(shader); }
 	
-	void Prepare(uint32_t workGroupSize);
-
-	virtual void UpdateDescriptors(vkEngine::DescriptorWriter& writer) override;
+	virtual void UpdateDescriptors() override;
 
 // Fields...
 	RayRefBuffer mRayRefs;
@@ -86,25 +81,23 @@ struct RayRefCounterContext : public vkEngine::ComputePipelineContext
 };
 
 // TODO: Make a proper Prefix summer
-struct PrefixSumContext : public vkEngine::ComputePipelineContext
+struct PrefixSumPipeline : public vkEngine::ComputePipeline
 {
-	PrefixSumContext() = default;
+	PrefixSumPipeline() = default;
+	PrefixSumPipeline(const vkEngine::PShader& shader) { this->SetShader(shader); }
 
-	void Prepare(uint32_t workGroupSize);
-
-	virtual void UpdateDescriptors(vkEngine::DescriptorWriter& writer) override;
+	virtual void UpdateDescriptors() override;
 
 // Fields...
 	vkEngine::Buffer<uint32_t> mRefCounts;
 };
 
-struct LuminanceMeanContext : public vkEngine::ComputePipelineContext
+struct LuminanceMeanPipeline : public vkEngine::ComputePipeline
 {
-	LuminanceMeanContext() = default;
+	LuminanceMeanPipeline() = default;
+	LuminanceMeanPipeline(const vkEngine::PShader& shader) { this->SetShader(shader); }
 
-	void Prepare(uint32_t workGroupSize);
-
-	virtual void UpdateDescriptors(vkEngine::DescriptorWriter& writer) override;
+	virtual void UpdateDescriptors() override;
 
 	vkEngine::Image mPixelMean;
 	vkEngine::Image mPixelVariance;
@@ -115,23 +108,15 @@ struct LuminanceMeanContext : public vkEngine::ComputePipelineContext
 	vkEngine::Buffer<WavefrontSceneInfo> mSceneInfo;
 };
 
-struct PostProcessImageContext : public vkEngine::ComputePipelineContext
+struct PostProcessImagePipeline : public vkEngine::ComputePipeline
 {
-	PostProcessImageContext() = default;
+	PostProcessImagePipeline() = default;
+	PostProcessImagePipeline(const vkEngine::PShader& shader) { this->SetShader(shader); }
 
-	void Prepare(const glm::ivec2& workGroupSize);
-
-	virtual void UpdateDescriptors(vkEngine::DescriptorWriter& writer) override;
+	virtual void UpdateDescriptors() override;
 
 	vkEngine::Image mPresentable;
 };
-
-using RaySortEpiloguePipeline = vkEngine::ComputePipeline<RaySortEpilogue>;
-using IntersectionPipeline = vkEngine::ComputePipeline<IntersectionPipelineContext>;
-using RayRefCounterPipeline = vkEngine::ComputePipeline<RayRefCounterContext>;
-using PrefixSumPipeline = vkEngine::ComputePipeline<PrefixSumContext>;
-using LuminanceMeanPipeline = vkEngine::ComputePipeline<LuminanceMeanContext>;
-using PostProcessImagePipeline = vkEngine::ComputePipeline<PostProcessImageContext>;
 
 PH_END
 AQUA_END

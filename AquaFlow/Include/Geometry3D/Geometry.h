@@ -11,7 +11,7 @@ AQUA_BEGIN
 	a shader often found in terms of graph or a tree. The shader determines
 	how those parameters are used and what resources
 	are required to shade the object. In other words,
-	we want a material system which can translate this graph int a
+	we want a material system which can translate this graph into a
 	parameterized shader that we can run on the GPU
 * ***************************************************/
 

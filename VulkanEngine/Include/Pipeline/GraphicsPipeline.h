@@ -3,8 +3,8 @@
 #include "../Core/Ref.h"
 #include "PipelineConfig.h"
 #include "../Memory/RenderTargetContext.h"
-#include "GraphicsContext.h"
 #include "BasicPipeline.h"
+#include "PShader.h"
 
 #include "../Descriptors/DescriptorsConfig.h"
 
@@ -12,128 +12,116 @@
 
 #include "../Core/Logger.h"
 
-#include "glm/glm.hpp"
-#include "glm/gtc/matrix_transform.hpp"
-
-#include <memory>
-#include <vector>
-
 VK_BEGIN
 
-template <typename PipelineContextType, typename BasePipeline = BasicPipeline<PipelineContextType>>
-class GraphicsPipeline : public BasePipeline
+struct GraphicsPipelineHandles : public PipelineHandles, public PipelineInfo
+{
+	RenderTargetContext TargetContext;
+	GraphicsPipelineState State = GraphicsPipelineState::eInitialized;
+};
+
+// Not thread safe
+// A bit shady
+template <typename Renderable, typename BasePipeline>
+class BasicGraphicsPipeline : public BasePipeline
 {
 public:
 	using MyBasePipeline = BasePipeline;
-	using MyContext = typename MyBasePipeline::MyContext;
-	using MyIndex = typename MyContext::MyIndex;
-	using MyRenderable = typename MyContext::MyRenderable;
-
-	using VertexBuffers = typename PipelineContextType::VertexBuffers;
-	using IndexBuffer = typename PipelineContextType::IndexBuffer;
+	using MyRenderable = Renderable;
+	using MyIndex = uint32_t; // For now, we will set IndexType to uint32_t only
 
 public:
-	GraphicsPipeline() = default;
+	BasicGraphicsPipeline() = default;
+	virtual ~BasicGraphicsPipeline() = default;
 
-	void Begin(vk::CommandBuffer commandBuffer,
+	// Methods inside the begin/end scope
+	virtual void Begin(vk::CommandBuffer commandBuffer,
 		const vk::ArrayProxyNoTemporaries<vk::ClearValue>& clearValues);
 
 	template <typename T>
 	void SetShaderConstant(const std::string& name, const T& constant);
 
-	void DrawIndexed(uint32_t indexOffset, uint32_t vertexOffset, uint32_t firstInstance, 
+	void DrawIndexed(uint32_t indexOffset, uint32_t vertexOffset, uint32_t firstInstance,
 		uint32_t instanceCount, uint32_t indexCount = std::numeric_limits<uint32_t>::max());
 
-	void End();
+	// Ends the scope
+	virtual void End();
 
-	void SubmitRenderable(const MyRenderable& renderable);
+	virtual void UpdateDescriptors() = 0;
 
-	Framebuffer GetRenderTarget() const { return this->GetPipelineContext().GetFramebuffer(); }
-	VertexBuffers GetVertexBuffers() const { return this->GetPipelineContext().GetVertexBuffers(); }
-	IndexBuffer GetIndexBuffer() const { return this->GetPipelineContext().GetIndexBuffer(); }
+	// methods outside the scope
+	virtual void SubmitRenderable(const MyRenderable& renderable) const = 0;
+
+	virtual const GraphicsPipelineConfig& GetConfig() const = 0;
+	virtual const PShader& GetShader() const override { return mShader; }
+
+	// Required by the GraphicsPipeline
+	Framebuffer GetFramebuffer() const { return mFramebuffer; }
+	void SetFramebuffer(vkEngine::Framebuffer target) { mFramebuffer = target; }
+
+	vkEngine::RenderTargetContext GetRenderTargetContext() const
+	{ return mHandles->TargetContext; }
 
 private:
-	Core::Ref<GraphicsPipelineHandles> mData;
-	RenderTargetContext mTargetContext;
-
-	GraphicsPipelineState mState = GraphicsPipelineState::eInitialized;
-
-	MyIndex mCurrVertexCount = 0;
+	Core::Ref<GraphicsPipelineHandles> mHandles;
+	vkEngine::Framebuffer mFramebuffer;
+	vkEngine::PShader mShader; // TODO: Could be stored inside the vkEngine::DescriptorWriter
 
 	friend class PipelineBuilder;
 
-private:
-	// Helper methods...
-	void Cleanup();
+protected:
+	// User defined behavior...
+
+	void SetShader(const PShader& shader) { mShader = shader; }
+
+	virtual void Cleanup() = 0;
+	virtual void BindVertexBuffers(vk::CommandBuffer commandBuffer) const = 0;
+	virtual void BindIndexBuffer(vk::CommandBuffer commandBuffer) const = 0;
+
+	virtual size_t GetVertexCount() const = 0;
+	virtual size_t GetIndexCount() const = 0;
 };
 
-template <typename PipelineContextType, typename BasePipeline>
-void GraphicsPipeline<PipelineContextType, BasePipeline>::Cleanup()
+template <typename Renderable>
+using GraphicsPipeline = BasicGraphicsPipeline<Renderable, BasicPipeline>;
+
+template <typename Renderable, typename BasePipeline>
+void BasicGraphicsPipeline<Renderable, BasePipeline>::Begin(vk::CommandBuffer commandBuffer,
+	const vk::ArrayProxyNoTemporaries<vk::ClearValue>& clearValues)
 {
-	MyContext& context = this->GetPipelineContext();
+	_STL_ASSERT(mHandles->State != GraphicsPipelineState::eRecording, "GraphicsPipeline::Begin has already been called! "
+		"You must end the current scope by calling GraphicsPipeline::End before starting a new one");
 
-	context.ForEachVertexBuffer([](size_t index, auto& buffer)
-	{
-		buffer.Clear();
-	});
+	this->BeginPipeline(commandBuffer);
 
-	GetIndexBuffer().Clear();
+	mHandles->State = GraphicsPipelineState::eRecording;
 
-	mCurrVertexCount = MyIndex(0);
+	Framebuffer renderTarget = GetFramebuffer();
+
+	vk::Rect2D renderArea;
+	renderArea.offset = vk::Offset2D(0, 0);
+	renderArea.extent = vk::Extent2D(renderTarget.GetResolution().x, renderTarget.GetResolution().y);
+
+	renderTarget.BeginCommands(commandBuffer);
+
+	// TODO: what about the depth attachment layout?
+	renderTarget.RecordTransitionColorAttachmentLayouts(vk::ImageLayout::eColorAttachmentOptimal,
+		vk::PipelineStageFlagBits::eColorAttachmentOutput);
+
+	vk::RenderPassBeginInfo beginRenderPass{};
+	beginRenderPass.setClearValues(clearValues);
+	beginRenderPass.setFramebuffer(renderTarget.GetNativeHandle());
+	beginRenderPass.setRenderArea(renderArea);
+	beginRenderPass.setRenderPass(GetRenderTargetContext().GetData().RenderPass);
+
+	commandBuffer.beginRenderPass(beginRenderPass, vk::SubpassContents::eInline);
+
+	commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, mHandles->Handle);
 }
 
-template <typename PipelineContextType, typename BasePipeline>
-void GraphicsPipeline<PipelineContextType, BasePipeline>::DrawIndexed(uint32_t firstIndex, 
-	uint32_t vertexOffset, uint32_t firstInstance, uint32_t instanceCount, uint32_t indexCount)
-{
-	_STL_ASSERT(mState == GraphicsPipelineState::eRecording, "GraphicsPipeline::Begin has never been called! "
-		"You must begin the scope by calling GraphicsPipeline::Begin before calling "
-		"GraphicsPipeline::End!");
-
-	MyContext& context = this->GetPipelineContext();
-
-	vk::CommandBuffer commandBuffer = this->GetCommandBuffer();
-
-	Framebuffer renderTarget = GetRenderTarget();
-
-	if (!mData->SetCache.empty())
-	{
-		commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-			mData->LayoutData.Layout, 0, mData->SetCache, nullptr);
-	}
-
-	context.ForEachVertexBuffer([commandBuffer](size_t index, auto& buffer)
-	{
-		commandBuffer.bindVertexBuffers(static_cast<uint32_t>(index), buffer.GetNativeHandles().Handle, { 0 });
-	});
-
-	commandBuffer.bindIndexBuffer(GetIndexBuffer().GetNativeHandles().Handle, 0, context.GetIndexType());
-
-	uint32_t idxCount = indexCount == std::numeric_limits<uint32_t>::max() ?
-		(uint32_t) GetIndexBuffer().GetSize() : indexCount;
-
-	commandBuffer.drawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
-
-	commandBuffer.endRenderPass();
-
-	renderTarget.EndCommands();
-}
-
-template <typename PipelineContextType, typename BasePipeline>
-void GraphicsPipeline<PipelineContextType, BasePipeline>::End()
-{
-	_STL_ASSERT(mState == GraphicsPipelineState::eRecording, "GraphicsPipeline::Begin has never been called! "
-		"You must begin the scope by calling GraphicsPipeline::Begin before calling "
-		"GraphicsPipeline::End!");
-
-	mState = GraphicsPipelineState::eExecutable;
-
-	this->EndPipeline();
-}
-
-template<typename PipelineContextType, typename BasePipeline>
+template<typename Renderable, typename BasePipeline>
 template<typename T>
-inline void GraphicsPipeline<PipelineContextType, BasePipeline>::SetShaderConstant(
+inline void BasicGraphicsPipeline<Renderable, BasePipeline>::SetShaderConstant(
 	const std::string& name, const T& constant)
 {
 	_VK_ASSERT(this->GetPipelineState() == PipelineState::eRecording,
@@ -141,9 +129,7 @@ inline void GraphicsPipeline<PipelineContextType, BasePipeline>::SetShaderConsta
 
 	vk::CommandBuffer commandBuffer = this->GetCommandBuffer();
 
-	MyContext& Context = this->GetPipelineContext();
-
-	const PushConstantSubrangeInfos& subranges = Context.GetPushConstantSubranges();
+	const PushConstantSubrangeInfos& subranges = GetShader().GetPushConstantSubranges();
 
 	_VK_ASSERT(subranges.find(name) != subranges.end(),
 		"Failed to find the push constant field \"" << name << "\" in the shader source code\n"
@@ -161,56 +147,51 @@ inline void GraphicsPipeline<PipelineContextType, BasePipeline>::SetShaderConsta
 		"* The constant has been optimized away in the shader\n"
 	);
 
-	commandBuffer.pushConstants(mData->LayoutData.Layout, range.stageFlags,
+	commandBuffer.pushConstants(mHandles->LayoutData.Layout, range.stageFlags,
 		range.offset, range.size, reinterpret_cast<const void*>(&constant));
 }
 
-template <typename PipelineContextType, typename BasePipeline>
-void GraphicsPipeline<PipelineContextType, BasePipeline>::SubmitRenderable(const MyRenderable& renderable)
+template <typename Renderable, typename BasePipeline>
+void BasicGraphicsPipeline<Renderable, BasePipeline>::DrawIndexed(uint32_t firstIndex, 
+	uint32_t vertexOffset, uint32_t firstInstance, uint32_t instanceCount, uint32_t indexCount)
 {
-	MyContext& context = this->GetPipelineContext();
+	_STL_ASSERT(mHandles->State == GraphicsPipelineState::eRecording, "GraphicsPipeline::Begin has never been called! "
+		"You must begin the scope by calling GraphicsPipeline::Begin before calling "
+		"GraphicsPipeline::End!");
 
-	context.CopyVertices(renderable);
-	context.CopyIndices(renderable, static_cast<MyIndex>(mCurrVertexCount));
+	vk::CommandBuffer commandBuffer = this->GetCommandBuffer();
 
-	mCurrVertexCount += static_cast<MyIndex>(context.GetVertexCount(renderable));
+	Framebuffer renderTarget = GetFramebuffer();
+
+	if (!mHandles->SetCache.empty())
+	{
+		commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+			mHandles->LayoutData.Layout, 0, mHandles->SetCache, nullptr);
+	}
+
+	BindVertexBuffers(commandBuffer);
+	BindIndexBuffer(commandBuffer);
+
+	uint32_t idxCount = indexCount == std::numeric_limits<uint32_t>::max() ?
+		(uint32_t) GetIndexCount() : indexCount;
+
+	commandBuffer.drawIndexed(idxCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
-template <typename PipelineContextType, typename BasePipeline>
-void GraphicsPipeline<PipelineContextType, BasePipeline>::Begin(vk::CommandBuffer commandBuffer,
-	const vk::ArrayProxyNoTemporaries<vk::ClearValue>& clearValues)
+template <typename Renderable, typename BasePipeline>
+void BasicGraphicsPipeline<Renderable, BasePipeline>::End()
 {
-	_STL_ASSERT(mState != GraphicsPipelineState::eRecording, "GraphicsPipeline::Begin has already been called! "
-	"You must end the current scope by calling GraphicsPipeline::End before starting a new one");
+	_STL_ASSERT(mHandles->State == GraphicsPipelineState::eRecording, "GraphicsPipeline::Begin has never been called! "
+		"You must begin the scope by calling GraphicsPipeline::Begin before calling "
+		"GraphicsPipeline::End!");
 
-	this->BeginPipeline(commandBuffer);
+	mHandles->State = GraphicsPipelineState::eExecutable;
 
-	MyContext& context = ((BasePipeline*) this)->GetPipelineContext();
+	this->GetCommandBuffer().endRenderPass();
 
-	Cleanup();
+	GetFramebuffer().EndCommands();
 
-	mState = GraphicsPipelineState::eRecording;
-
-	Framebuffer renderTarget = GetRenderTarget();
-
-	vk::Rect2D renderArea;
-	renderArea.offset = vk::Offset2D(0, 0);
-	renderArea.extent = vk::Extent2D(renderTarget.GetResolution().x, renderTarget.GetResolution().y);
-
-	renderTarget.BeginCommands(commandBuffer);
-
-	renderTarget.RecordTransitionColorAttachmentLayouts(vk::ImageLayout::eColorAttachmentOptimal,
-		vk::PipelineStageFlagBits::eColorAttachmentOutput);
-
-	vk::RenderPassBeginInfo beginRenderPass{};
-	beginRenderPass.setClearValues(clearValues);
-	beginRenderPass.setFramebuffer(renderTarget.GetNativeHandle());
-	beginRenderPass.setRenderArea(renderArea);
-	beginRenderPass.setRenderPass(context.GetRenderContext().GetData().RenderPass);
-
-	commandBuffer.beginRenderPass(beginRenderPass, vk::SubpassContents::eInline);
-
-	commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, mData->Handle);
+	this->EndPipeline();
 }
 
 VK_END

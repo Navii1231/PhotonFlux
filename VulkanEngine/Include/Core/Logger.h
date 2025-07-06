@@ -1,9 +1,6 @@
 #pragma once
 #include "Config.h"
 
-#include <sstream>
-#include <iostream>
-
 VK_BEGIN
 
 // A basic logger class for error reporting

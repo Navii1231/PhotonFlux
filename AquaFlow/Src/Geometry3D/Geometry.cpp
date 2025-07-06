@@ -1,3 +1,4 @@
+#include "Core/Aqpch.h"
 #include "Geometry3D/Geometry.h"
 #include "Assimp/Scene.h"
 
@@ -90,6 +91,23 @@ void AQUA_NAMESPACE::Geometry3D::MakeHollow()
 
 	mMeshes.clear();
 	mMaterials.clear();
+}
+
+uint32_t AQUA_NAMESPACE::MeshData::GetFaceIndexCount() const
+{
+	switch (mPrimitive)
+	{
+		case FacePrimitive::ePoint: return 1;
+		case FacePrimitive::eLine: return 2;
+		case FacePrimitive::eTriangle: return 3;
+		case FacePrimitive::eQuad: return 4;
+		default: return 0;
+	}
+}
+
+size_t AQUA_NAMESPACE::MeshData::GetIndexCount() const
+{
+	return aFaces.size() * GetFaceIndexCount();
 }
 
 void AQUA_NAMESPACE::MeshData::AssignPositions(const glm::vec3* positions, uint32_t count)

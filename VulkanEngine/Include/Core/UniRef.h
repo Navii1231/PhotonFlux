@@ -1,6 +1,5 @@
 #pragma once
-#include "Config.h"
-#include <memory>
+#include "vkpch.h"
 
 VK_BEGIN
 VK_CORE_BEGIN

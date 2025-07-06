@@ -1,19 +1,26 @@
 #pragma once
 #include "RayTracingStructures.h"
+#include "../Utils/CompilerErrorChecker.h"
 
 AQUA_BEGIN
 PH_BEGIN
 
-struct RayGenerationPipelineContext : public vkEngine::ComputePipelineContext
-{
-	RayGenerationPipelineContext() {}
+// change required
 
-	void Prepare(uint32_t workGroupSize);
+struct RayGenerationPipeline : public vkEngine::ComputePipeline
+{
+	RayGenerationPipeline() = default;
+	RayGenerationPipeline(const vkEngine::PShader& shader) { this->SetShader(shader); }
 
 	void SetSceneInfo(const WavefrontSceneInfo& sceneInfo);
 	void SetCamera(const PhysicalCamera& camera);
 
-	virtual void UpdateDescriptors(vkEngine::DescriptorWriter& writer);
+	virtual void UpdateDescriptors();
+
+	
+
+	RayBuffer GetRays() const { return mRays; }
+	RayInfoBuffer GetRayInfos() const { return mRayInfos; }
 
 	// Fields...
 	//Buffers
@@ -26,8 +33,6 @@ struct RayGenerationPipelineContext : public vkEngine::ComputePipelineContext
 
 	bool mCameraUpdated = false;
 };
-
-using RayGenerationPipeline = vkEngine::ComputePipeline<RayGenerationPipelineContext>;
 
 PH_END
 AQUA_END

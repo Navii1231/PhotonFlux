@@ -1,6 +1,4 @@
 #pragma once
-#include <fstream>
-
 #include "../Core/AqCore.h"
 
 #define PH_FLUX_NAMESPACE     PhFlux

@@ -18,7 +18,7 @@ layout (location = 0) in vec4 vPosition;
 layout (location = 1) in vec4 vNormal;
 layout (location = 2) in vec4 vTangent;
 layout (location = 3) in vec4 vBitangent;
-layout (location = 4) in vec2 vTexCoords;
+layout (location = 4) in vec3 vTexCoords;
 layout (location = 5) in vec2 vMatID_MeshID;
 
 void main()
@@ -27,6 +27,6 @@ void main()
 	oNormal = vNormal;
 	oTangent = vTangent;
 	oBitangent = vBitangent;
-	oTexCoords = vTexCoords;
+	oTexCoords = vTexCoords.xy;
 	oMaterialIDs = vMatID_MeshID;
 }

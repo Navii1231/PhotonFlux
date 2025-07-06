@@ -1,5 +1,5 @@
 #pragma once
-#include "Device/Device.h"
+#include "Device/Context.h"
 #include "Window/GLFW_Window.h"
 #include "ShaderCompiler/ShaderCompiler.h"
 
@@ -14,13 +14,13 @@ struct ApplicationCreateInfo
 	uint32_t WorkerCount = 8;
 };
 
-inline VkBool32 DebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT c_severity,
-	VkDebugUtilsMessageTypeFlagsEXT c_type, const std::string& message)
+inline vk::Bool32 DebugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT severity,
+	vk::DebugUtilsMessageTypeFlagsEXT type, const std::string& message)
 {
 	std::cout << "Vulkan API Core ";
 
-	vk::DebugUtilsMessageSeverityFlagBitsEXT severity = (vk::DebugUtilsMessageSeverityFlagBitsEXT) c_severity;
-	vk::DebugUtilsMessageTypeFlagBitsEXT type = (vk::DebugUtilsMessageTypeFlagBitsEXT) c_type;
+	std::string bufMesg;
+	std::string comp = "vkCreateSwapchainKHR() : pCreateInfo->imageFormat VK_FORMAT_R8G8B8A8_SRGB with tiling VK_IMAGE_TILING_OPTIMAL does not support usage that includes VK_IMAGE_USAGE_STORAGE_BIT.";
 
 	switch (severity)
 	{
@@ -39,6 +39,11 @@ inline VkBool32 DebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT c_severity,
 
 			char buffer[2048];
 			sprintf_s(buffer, "%s", message.c_str());
+
+			bufMesg = buffer;
+
+			if (bufMesg.find(comp, 0) == 0)
+				return VK_TRUE;
 
 			_STL_ASSERT(false, buffer);
 
@@ -66,7 +71,7 @@ public:
 
 protected:
 	std::unique_ptr<WindowsWindow> mWindow;
-	std::shared_ptr<vkEngine::Device> mDevice;
+	std::shared_ptr<vkEngine::Context> mContext;
 	std::shared_ptr<vkEngine::Swapchain> mSwapchain;
 
 	vkEngine::Core::Ref<vk::Instance> mInstance;

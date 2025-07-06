@@ -24,7 +24,7 @@ public:
 	BVHFactory() = default;
 
 	void SetDepth(int depth) { mDepth = depth; }
-	void SetSplitStrategy(const SplitStrategy& strategy);
+	void SetSplitStrategy(const SplitStrategy& strategy) { mStrategy = strategy; }
 
 	template <typename VertIt, typename IdxIt>
 	BVH Build(VertIt vBeg, VertIt vEnd, IdxIt iBeg, IdxIt iEnd);
@@ -86,17 +86,12 @@ BVH AQUA_NAMESPACE::PH_FLUX_NAMESPACE::BVHFactory::Build(VertIt vBeg, VertIt vEn
 	rootNode.EndIndex = static_cast<uint32_t>(mFaces.size());
 
 	EncloseIntoBoundingBox(rootNode);
-	SplitRecursive(rootNode, depth);
+	SplitRecursive(rootNode, mDepth);
 
 	mCurrent.Vertices = std::move(mVertices);
 	mCurrent.Faces = std::move(mFaces);
 
 	return mCurrent;
-}
-
-void BVHFactory::SetSplitStrategy(const SplitStrategy& strategy)
-{
-	mStrategy = strategy;
 }
 
 template <typename Iter>

@@ -4,7 +4,7 @@
 
 VK_BEGIN
 
-class Device;
+class Context;
 
 VK_CORE_BEGIN
 
@@ -61,7 +61,7 @@ private:
 
 	vk::Result WaitIdleAsync(uint64_t timeout) const;
 
-	friend class Device;
+	friend class Context;
 	friend class QueueManager;
 };
 

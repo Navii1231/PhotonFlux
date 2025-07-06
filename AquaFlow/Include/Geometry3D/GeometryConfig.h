@@ -1,15 +1,5 @@
 #pragma once
 #include "../Core/AqCore.h"
-#include "glm/glm.hpp"
-
-#include <vector>
-#include <array>
-#include <unordered_map>
-#include <algorithm>
-
-#include <iostream>
-#include <thread>
-#include <mutex>
 
 struct aiFace;
 
@@ -81,6 +71,10 @@ struct MeshData
 	std::vector<Face> aFaces;
 
 	FacePrimitive mPrimitive = FacePrimitive::eTriangle;
+
+	uint32_t GetFaceIndexCount() const;
+
+	size_t GetIndexCount() const;
 
 	void AssignPositions(const glm::vec3* positions, uint32_t count);
 	void AssignTexCoords(const glm::vec3* coords, uint32_t count);

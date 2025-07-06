@@ -2,8 +2,6 @@
 #include "CompilerUtils.h"
 #include "ShaderConfig.h"
 
-#include <filesystem>
-
 VK_BEGIN
 
 struct IncludeResult

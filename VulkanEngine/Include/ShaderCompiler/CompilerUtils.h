@@ -1,9 +1,6 @@
 #pragma once
 #include "../Core/Config.h"
 
-#include <fstream>
-#include <sstream>
-
 VK_BEGIN
 
 inline bool ReadFile(const std::string& filepath, std::string& buffer)

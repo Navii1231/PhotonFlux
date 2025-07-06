@@ -1,6 +1,6 @@
 #pragma once
 #include "../Config.h"
-#include "../../Device/DeviceConfig.h"
+#include "../../Device/ContextConfig.h"
 #include "../../Device/PhysicalDevice.h"
 
 VK_BEGIN

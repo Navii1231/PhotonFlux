@@ -14,6 +14,7 @@ bool operator ==(const DescriptorLocation& left, const DescriptorLocation& right
 bool operator !=(const DescriptorLocation& left, const DescriptorLocation& right);
 
 
+// TODO: Could also include vkEngine::PShader here
 class DescriptorWriter {
 public:
 	DescriptorWriter() = default;

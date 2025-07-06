@@ -1,8 +1,5 @@
 #pragma once
 #include "Config.h"
-#include <mutex>
-#include <atomic>
-#include <functional>
 
 VK_BEGIN
 VK_CORE_BEGIN
@@ -57,7 +54,6 @@ public:
 	// Sets a new payload and deletes the existing one
 	void SetValue(const T& handle);
 
-	// Same has operator = with right hand side having the payload to be given handle
 	void ReplaceValue(const T& handle);
 
 

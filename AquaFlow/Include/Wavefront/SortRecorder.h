@@ -8,21 +8,22 @@ PH_BEGIN
 // Temporary for debugging...
 #define _DEBUG_RAY_SORTER 0
 
+// TODO: change required
+
 template <typename CompType>
 class SortRecorder
 {
 public:
-	using PassContext = MergeSorterPassContext<CompType>;
 	using SorterPipeline = MergeSorterPass<CompType>;
-	using ArrayRef = typename PassContext::ArrayRef;
+	using ArrayRef = typename SorterPipeline::ArrayRef;
 
 public:
-	SortRecorder(vkEngine::PipelineBuilder builder, vkEngine::MemoryResourceManager manager);
+	SortRecorder(vkEngine::PipelineBuilder builder, vkEngine::ResourcePool manager);
 
 	SortRecorder(const SortRecorder& Other);
 	SortRecorder& operator =(const SortRecorder& Other);
 
-	void CompileSorterPipeline(uint32_t workGroupSize);
+	void InvalidateSorterPipeline(uint32_t workGroupSize);
 
 	void SetBuffer(const vkEngine::Buffer<ArrayRef>& buffer);
 	uint32_t Run(vk::CommandBuffer commandBuffer);
@@ -40,7 +41,7 @@ private:
 	SorterPipeline mMergePass;
 
 	vkEngine::PipelineBuilder mPipelineBuilder;
-	vkEngine::MemoryResourceManager mMemoryManager;
+	vkEngine::ResourcePool mResourcePool;
 
 private:
 	void CreateBuffer();
@@ -48,15 +49,15 @@ private:
 
 template<typename CompType>
 inline SortRecorder<CompType>::SortRecorder(vkEngine::PipelineBuilder builder, 
-	vkEngine::MemoryResourceManager manager)
-	: mPipelineBuilder(builder), mMemoryManager(manager)
+	vkEngine::ResourcePool manager)
+	: mPipelineBuilder(builder), mResourcePool(manager)
 {
 	CreateBuffer();
 }
 
 template<typename CompType>
 inline SortRecorder<CompType>::SortRecorder(const SortRecorder& Other)
-	: mPipelineBuilder(Other.mPipelineBuilder), mMemoryManager(Other.mMemoryManager), 
+	: mPipelineBuilder(Other.mPipelineBuilder), mResourcePool(Other.mResourcePool), 
 	mWorkGroupSize(Other.mWorkGroupSize)
 {
 	CreateBuffer();
@@ -64,10 +65,9 @@ inline SortRecorder<CompType>::SortRecorder(const SortRecorder& Other)
 
 	if (Other.mMergePass)
 	{
-		PassContext context = Other.mMergePass.GetPipelineContext();
-		mMergePass = mPipelineBuilder.BuildComputePipeline(context);
+		mMergePass = Other.mMergePass;
 
-		mMergePass.GetPipelineContext().UploadBuffer(mBuffer);
+		mMergePass.SetBuffer(mBuffer);
 		mMergePass.UpdateDescriptors();
 	}
 }
@@ -82,10 +82,8 @@ inline SortRecorder<CompType>& SortRecorder<CompType>::operator=(const SortRecor
 
 	if (Other.mMergePass)
 	{
-		PassContext context = Other.mMergePass.GetPipelineContext();
-		mMergePass = mPipelineBuilder.BuildComputePipeline(context);
-
-		mMergePass.GetPipelineContext().UploadBuffer(mBuffer);
+		mMergePass = Other.mMergePass;
+		mMergePass.SetBuffer(mBuffer);
 		mMergePass.UpdateDescriptors();
 	}
 
@@ -93,16 +91,13 @@ inline SortRecorder<CompType>& SortRecorder<CompType>::operator=(const SortRecor
 }
 
 template<typename CompType>
-inline void SortRecorder<CompType>::CompileSorterPipeline(uint32_t workGroupSize)
+inline void SortRecorder<CompType>::InvalidateSorterPipeline(uint32_t workGroupSize)
 {
 	mWorkGroupSize = workGroupSize;
 
-	PassContext context;
+	mMergePass = mPipelineBuilder.BuildComputePipeline<SorterPipeline>(workGroupSize);
 
-	context.CompileShader(workGroupSize);
-	mMergePass = mPipelineBuilder.BuildComputePipeline(context);
-
-	mMergePass.GetPipelineContext().UploadBuffer(mBuffer);
+	mMergePass.SetBuffer(mBuffer);
 	mMergePass.UpdateDescriptors();
 }
 
@@ -120,7 +115,7 @@ inline void SortRecorder<CompType>::SetBuffer(const vkEngine::Buffer<ArrayRef>& 
 
 	//vkEngine::CopyBufferRegions(mBuffer, buffer, { copyBuffer });
 
-	mMergePass.GetPipelineContext().UploadBuffer(mBuffer);
+	mMergePass.SetBuffer(mBuffer);
 }
 
 template<typename CompType>
@@ -182,23 +177,22 @@ template<typename CompType>
 inline void SortRecorder<CompType>::ResizeBuffer(uint32_t NewSize)
 {
 	mBuffer.Resize(NewSize);
-	mMergePass.GetPipelineContext().UploadBuffer(mBuffer);
 
+	mMergePass.SetBuffer(mBuffer);
 	mMergePass.UpdateDescriptors();
 }
 
 template<typename CompType>
 inline void SortRecorder<CompType>::CreateBuffer()
 {
-	vkEngine::BufferCreateInfo bufferInfo{};
-	bufferInfo.Usage = vk::BufferUsageFlagBits::eStorageBuffer;
-	bufferInfo.MemProps = vk::MemoryPropertyFlagBits::eDeviceLocal;
+	vk::BufferUsageFlags usage = vk::BufferUsageFlagBits::eStorageBuffer;
+	vk::MemoryPropertyFlags memProps = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
 #if _DEBUG_RAY_SORTER
-	bufferInfo.MemProps = vk::MemoryPropertyFlagBits::eHostCoherent;
+	vk::MemoryPropertyFlags memProps = vk::MemoryPropertyFlagBits::eHostCoherent;
 #endif
 
-	mBuffer = mMemoryManager.CreateBuffer<ArrayRef>(bufferInfo);
+	mBuffer = mResourcePool.CreateBuffer<ArrayRef>(usage, memProps);
 }
 
 PH_END

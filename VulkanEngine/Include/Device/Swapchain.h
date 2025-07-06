@@ -28,7 +28,7 @@ struct SwapchainFrame
 
 struct SwapchainData
 {
-	CommandPoolManager CommandPoolManager;
+	CommandPools CommandPoolManager;
 	CommandBufferAllocator CommandsAllocator;
 
 	RenderTargetContext TargetContext;
@@ -60,6 +60,8 @@ public:
 
 	SwapchainData GetSwapchainData() const { return mData; }
 
+	QueueManagerRef GetQueueManager() const { return mQueueManager; }
+
 	const SwapchainFrame& operator[](size_t index) const { return *mData.Frames[index]; }
 
 private:
@@ -69,7 +71,8 @@ private:
 	SwapchainSupportDetails mSupportDetails;
 	SwapchainInfo mInfo;
 
-	ProcessManager mProcessHandler;
+	QueueManagerRef mQueueManager;
+	CommandPools mCommandPools;
 
 	SwapchainData mData;
 
@@ -77,12 +80,13 @@ private:
 	PhysicalDevice mPhysicalDevice;
 
 	Swapchain(Core::Ref<vk::Device> device, PhysicalDevice physicalDevice,
-		const RenderContextBuilder& builder, const SwapchainInfo& info, const ProcessManager& processManager);
+		const RenderContextBuilder& builder, const SwapchainInfo& info, 
+		QueueManagerRef mQueueManager, CommandPools mCommandPools);
 
 	Swapchain(const Swapchain&) = delete;
 	Swapchain& operator=(const Swapchain&) = delete;
 
-	friend class Device;
+	friend class Context;
 
 private:
 	void InsertImageHandle(Image& image, vk::Image handle, vk::ImageView viewHandle, const Core::SwapchainBundle& bundle);

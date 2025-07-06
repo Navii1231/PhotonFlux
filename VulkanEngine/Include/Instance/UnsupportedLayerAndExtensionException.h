@@ -1,7 +1,5 @@
 #pragma once
 #include "../Core/Config.h"
-#include <exception>
-#include <set>
 
 VK_BEGIN
 

@@ -1,12 +1,7 @@
 #pragma once
-#include "glm/gtc/matrix_transform.hpp"
-#include "glm/glm.hpp"
-
 #include "../Geometry3D/GeometryConfig.h"
 
 #include "Core.h"
-
-#include <vector>
 
 AQUA_BEGIN
 PH_BEGIN
@@ -237,7 +232,7 @@ struct EstimatorTarget
 
 struct EstimatorCreateInfo
 {
-	vkEngine::Device Context;
+	vkEngine::Context Context;
 	glm::ivec2 TargetResolution;
 
 	std::string ShaderDirectory;

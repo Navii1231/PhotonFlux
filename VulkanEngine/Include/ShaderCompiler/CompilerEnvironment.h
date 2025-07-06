@@ -2,10 +2,6 @@
 #include "ShaderIncluder.h"
 #include "ShaderConfig.h"
 
-#include <set>
-#include <filesystem>
-#include <unordered_map>
-
 VK_BEGIN
 
 class CompilerEnvironment
@@ -13,8 +9,6 @@ class CompilerEnvironment
 public:
 	explicit CompilerEnvironment(const CompilerConfig& config)
 		: mConfig(config) {}
-
-	void SetConfig(const CompilerConfig& config) { mConfig = config; }
 
 	void AddPath(const std::filesystem::path& path);
 	void RemovePath(const std::filesystem::path& path);
@@ -28,6 +22,8 @@ public:
 	std::shared_ptr<ShaderIncluder> CreateShaderIncluder(const std::string& shaderPath) const;
 
 	CompilerConfig GetConfig() const { return mConfig; }
+	void SetConfig(const CompilerConfig& config) { mConfig = config; }
+
 	const std::unordered_map<std::string, std::string> GetMacroDefines() const
 	{ return mMacrosDefines; }
 

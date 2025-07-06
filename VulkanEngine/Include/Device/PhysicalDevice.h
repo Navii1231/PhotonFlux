@@ -38,7 +38,7 @@ struct PhysicalDevice
 	Core::QueueIndexMap GetQueueIndexMap(vk::QueueFlags flags) const;
 };
 
-struct DeviceCreateInfo
+struct ContextCreateInfo
 {
 	PhysicalDevice PhysicalDevice;
 	vk::PhysicalDeviceFeatures RequiredFeatures;

@@ -7,10 +7,12 @@
 #include "../Descriptors/DescriptorsConfig.h"
 
 #include "../ShaderCompiler/ShaderCompiler.h"
+#include "../Memory/RenderTargetContext.h"
 
 VK_BEGIN
 
 class RenderTargetContext;
+class PShader;
 
 enum class GraphicsPipelineState
 {
@@ -58,21 +60,23 @@ struct PipelineInfo
 	std::vector<ShaderSPIR_V> ShaderStages;
 };
 
-struct GraphicsPipelineInfo : public PipelineInfo
+struct GraphicsPipelineConfig
 {
 	vk::PrimitiveTopology Topology = vk::PrimitiveTopology::eTriangleList;
-	VertexInputDesc VertexInputState;
+	VertexInputDesc VertexInput;
 
 	RasterizerInfo Rasterizer;
-	DepthStencilBufferingInfo DepthBufferingInfo;
 
-	vk::Viewport Viewport;
-	vk::Rect2D Scissor;
-};
+	DepthStencilBufferingInfo DepthBufferingState;
 
-struct ComputePipelineInfo : public PipelineInfo
-{
+	vk::Viewport CanvasView;
+	vk::Rect2D CanvasScissor;
 
+	RenderTargetContext TargetContext;
+
+	vk::IndexType IndicesType = vk::IndexType::eUint32;
+
+	uint32_t SubpassIndex = 0;
 };
 
 struct PipelineHandles
@@ -86,31 +90,9 @@ struct PipelineHandles
 	Core::Ref<vk::Device> Device;
 };
 
-struct GraphicsPipelineHandles : public PipelineHandles
-{
-	GraphicsPipelineInfo Info;
-};
-
-struct ComputePipelineHandles : public PipelineHandles
-{
-	ComputePipelineInfo Info;
-};
-
 struct PipelineBuilderData
 {
 	vk::PipelineCache Cache;
-};
-
-struct GraphicsPipelineHandlesDeleter
-{
-	void operator ()(const GraphicsPipelineHandles& handles) const
-	{
-		//for (auto setLayout : handles.SetLayouts)
-		//	handles.Device->destroyDescriptorSetLayout(setLayout);
-
-		handles.Device->destroyPipelineLayout(handles.LayoutData.Layout);
-		handles.Device->destroyPipeline(handles.Handle);
-	}
 };
 
 VK_END

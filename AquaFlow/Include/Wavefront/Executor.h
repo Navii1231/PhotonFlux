@@ -9,6 +9,9 @@ class Executor
 public:
 	Executor();
 
+	// TODO: Freezes when complex geometry is introduced
+	// The underlying bottleneck is probably an excessive use of memory barriers...
+	// We could replace them with vk::Semaphore's or vk::Fence's to improve the speed...
 	TraceResult Trace(vk::CommandBuffer commandBuffer);
 
 	void SetTraceSession(const TraceSession& traceSession);

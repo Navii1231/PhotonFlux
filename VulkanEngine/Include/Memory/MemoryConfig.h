@@ -2,9 +2,6 @@
 #include "../Core/Config.h"
 #include "../Core/Utils/MemoryUtils.h"
 #include "../Core/Ref.h"
-#include "../Process/ProcessManager.h"
-
-#include <unordered_map>
 
 VK_BEGIN
 VK_CORE_BEGIN
@@ -23,13 +20,6 @@ struct ImageChunk
 };
 
 VK_CORE_END
-
-struct BufferCreateInfo
-{
-	size_t Size = 0;
-	vk::BufferUsageFlags Usage = vk::BufferUsageFlagBits::eVertexBuffer;
-	vk::MemoryPropertyFlags MemProps = vk::MemoryPropertyFlagBits::eHostCoherent;
-};
 
 struct ImageCreateInfo
 {
@@ -78,8 +68,9 @@ struct ImageAttachmentInfo
 
 struct RenderContextCreateInfo
 {
-	std::vector<ImageAttachmentInfo> ColorAttachments;
-	ImageAttachmentInfo DepthStencilAttachment;
+	// NOTE: the depth and stencil attachments come at the end
+	std::vector<ImageAttachmentInfo> Attachments;
+	//ImageAttachmentInfo DepthStencilAttachment;
 
 	bool UsingDepthAttachment = false;
 	bool UsingStencilAttachment = false;

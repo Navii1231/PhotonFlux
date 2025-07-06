@@ -2,13 +2,15 @@
 #include "../Core/Config.h"
 #include "../Core/Ref.h"
 
+#include "PShader.h"
+#include "BasicPipeline.h"
 #include "GraphicsPipeline.h"
 #include "ComputePipeline.h"
 
 #include "../Descriptors/DescriptorWriter.h"
 #include "../Descriptors/DescriptorPoolManager.h"
 
-#include "../Memory/MemoryResourceManager.h"
+#include "../Memory/ResourcePool.h"
 
 VK_BEGIN
 
@@ -18,84 +20,63 @@ VK_BEGIN
 class PipelineBuilder
 {
 public:
-	template <typename PipelineContextType>
-	GraphicsPipeline<PipelineContextType, BasicPipeline<PipelineContextType>>
-		BuildGraphicsPipeline(const PipelineContextType& config) const;
+	template <typename UGraphicsPipeline, typename ...Args>
+	UGraphicsPipeline BuildGraphicsPipeline(Args&&... args) const;
 
-	template <typename PipelineContextType>
-	ComputePipeline<PipelineContextType, BasicPipeline<PipelineContextType>>
-		BuildComputePipeline(const PipelineContextType& config) const;
+	template <typename UComputePipeline, typename ...Args>
+	UComputePipeline BuildComputePipeline(Args&&... args) const;
 
 	// TODO: Implement ray tracing pipeline creation
 
-	/*template <typename PipelineContextType>
-	RayTracingPipeline<PipelineContextType, BasicPipeline<PipelineContextType>>
-		BuildRayTracingPipeline(const PipelineContextType& config) const;*/
+	/*template <typename URayTracingPipeline, typename ...Args>
+	URayTracingPipeline BuildRayTracingPipeline(const RayTracingPipelineConfig& shader, Args&&... config) const;*/
 
 private:
 	Core::Ref<vk::Device> mDevice;
 
 	Core::Ref<PipelineBuilderData> mData;
-	MemoryResourceManager mMemoryManager;
+	ResourcePool mMemoryManager;
 	DescriptorPoolManager mDescPoolManager;
 
-	friend class Device;
+private:
+	// Helper functions...
+
+	//template <typename UComputePipeline, typename ...Args>
+	//void BuildComputePipeline(UComputePipeline& pipeline, const PShader& shader, Args&&... args) const;
+
+	friend class Context;
 
 private:
 	// Helper methods...
-	template <typename PipelineContextType>
-	vk::PipelineInputAssemblyStateCreateInfo GetAssemblyStateInfo(
-		GraphicsPipelineInfo& Info, const PipelineContextType& config) const;
+	inline vk::PipelineInputAssemblyStateCreateInfo GetAssemblyStateInfo(const GraphicsPipelineConfig& config) const;
+	inline vk::PipelineVertexInputStateCreateInfo GetVertexInputStateInfo(const GraphicsPipelineConfig& config) const;
 
-	template <typename PipelineContextType> 
-	vk::PipelineVertexInputStateCreateInfo GetVertexInputStateInfo(
-		GraphicsPipelineInfo& Info, const PipelineContextType& config) const;
+	inline std::vector<vk::PipelineShaderStageCreateInfo> GetPipelineStages(
+		PipelineInfo& Info, const PShader& shader) const;
 
-	template <typename PipelineContextType>
-	std::vector<vk::PipelineShaderStageCreateInfo> GetPipelineStages(
-		PipelineInfo& Info, const PipelineContextType& config) const;
+	inline vk::PipelineRasterizationStateCreateInfo GetRasterizerStateInfo(const GraphicsPipelineConfig& config) const;
+	inline vk::PipelineDepthStencilStateCreateInfo GetDepthStencilStateInfo(const GraphicsPipelineConfig& config) const;
+	inline vk::PipelineMultisampleStateCreateInfo GetSampleStateInfo(const GraphicsPipelineConfig& config) const;
+	inline vk::PipelineColorBlendStateCreateInfo GetBlendStateInfo(const GraphicsPipelineConfig& config) const;
+	inline PipelineLayoutData CreatePipelineLayout(const PShader& shader) const;
 
-	template <typename PipelineContextType> 
-	vk::PipelineRasterizationStateCreateInfo GetRasterizerStateInfo(
-		GraphicsPipelineInfo& Info, const PipelineContextType& config) const;
-
-	template <typename PipelineContextType>
-	vk::PipelineDepthStencilStateCreateInfo GetDepthStencilStateInfo(
-		GraphicsPipelineInfo& Info, const PipelineContextType& config) const;
-
-	template <typename PipelineContextType> 
-	vk::PipelineMultisampleStateCreateInfo GetSampleStateInfo(
-		GraphicsPipelineInfo& Info, const PipelineContextType& config) const;
-
-	template <typename PipelineContextType> 
-	vk::PipelineColorBlendStateCreateInfo GetBlendStateInfo(
-		GraphicsPipelineInfo& Info, const PipelineContextType& config) const;
-
-	template <typename PipelineContextType> 
-	void GetViewportStateInfo(
-		GraphicsPipelineInfo& Info, const PipelineContextType& config) const;
-
-	template <typename PipelineContextType> 
-	PipelineLayoutData CreatePipelineLayout(const PipelineContextType& config) const;
-
-	void FreeShaderModules(const std::vector<vk::PipelineShaderStageCreateInfo>& shaders) const
-	{
-		for (const auto& shader : shaders)
-			mDevice->destroyShaderModule(shader.module);
-	}
+	inline void FreeShaderModules(const std::vector<vk::PipelineShaderStageCreateInfo>& shaders) const;
 
 };
 
-template <typename PipelineContextType>
-ComputePipeline<PipelineContextType, BasicPipeline<PipelineContextType>> VK_NAMESPACE::PipelineBuilder::
-	BuildComputePipeline(const PipelineContextType& context) const
+template <typename UComputePipeline, typename... Args>
+UComputePipeline VK_NAMESPACE::PipelineBuilder::BuildComputePipeline(Args&& ...args) const
 {
+	UComputePipeline pipeline(std::forward<Args>(args)...);
+
+	const PShader& shader = pipeline.GetShader();
+
 	ComputePipelineHandles handles;
+	handles.WorkGroupSize = shader.mWorkGroupSize;
 
-	std::vector<vk::PipelineShaderStageCreateInfo> pipelineStages = GetPipelineStages(handles.Info, context);
+	std::vector<vk::PipelineShaderStageCreateInfo> pipelineStages = GetPipelineStages(handles, shader);
 
-	// TODO: Directly create the DescriptorWriter...
-	auto layoutData = CreatePipelineLayout(context);
+	auto layoutData = CreatePipelineLayout(shader);
 
 	vk::ComputePipelineCreateInfo createInfo{};
 	createInfo.setLayout(layoutData.Layout);
@@ -113,8 +94,7 @@ ComputePipeline<PipelineContextType, BasicPipeline<PipelineContextType>> VK_NAME
 
 	auto Data = mData;
 
-	ComputePipeline<PipelineContextType> pipeline;
-	pipeline.mPipelineHandles = Core::CreateRef(handles, [Data](const ComputePipelineHandles& info)
+	pipeline.mHandles = Core::CreateRef(handles, [Data](const ComputePipelineHandles& info)
 	{
 		info.Device->destroyPipeline(info.Handle);
 		info.Device->destroyPipelineLayout(info.LayoutData.Layout);
@@ -123,52 +103,55 @@ ComputePipeline<PipelineContextType, BasicPipeline<PipelineContextType>> VK_NAME
 	// Init the Base Pipeline...
 	auto DescWriter = DescriptorWriter(mDevice, handles.SetCache);
 
-	pipeline.mPipelineSpecs = std::make_shared<BasicPipelineSpec<PipelineContextType>>(
-		std::move(context), std::move(DescWriter));
+	pipeline.mPipelineSpecs = std::make_shared<BasicPipelineSpec>(std::move(DescWriter));
 
 	FreeShaderModules(pipelineStages);
 	return pipeline;
 }
 
-template <typename PipelineContextType>
-GraphicsPipeline<PipelineContextType, BasicPipeline<PipelineContextType>>
-VK_NAMESPACE::PipelineBuilder::BuildGraphicsPipeline(const PipelineContextType& context) const
+template <typename UGraphicsPipeline, typename ...Args>
+UGraphicsPipeline VK_NAMESPACE::PipelineBuilder::
+	BuildGraphicsPipeline(Args&&... args) const
 {
+	UGraphicsPipeline pipeline(std::forward<Args>(args)...);
+
 	GraphicsPipelineHandles handles;
 
-	vk::PipelineInputAssemblyStateCreateInfo assemblyInfo = GetAssemblyStateInfo(handles.Info, context);
-	vk::PipelineVertexInputStateCreateInfo vertexInputInfo = GetVertexInputStateInfo(handles.Info, context);
-	std::vector<vk::PipelineShaderStageCreateInfo> pipelineStages = GetPipelineStages(handles.Info, context);
-	vk::PipelineRasterizationStateCreateInfo rasterizer = GetRasterizerStateInfo(handles.Info, context);
-	vk::PipelineDepthStencilStateCreateInfo depthStencilState = GetDepthStencilStateInfo(handles.Info, context);
-	vk::PipelineMultisampleStateCreateInfo sampleState = GetSampleStateInfo(handles.Info, context);
-	vk::PipelineColorBlendStateCreateInfo blendState = GetBlendStateInfo(handles.Info, context);
+	const GraphicsPipelineConfig& pConfig = pipeline.GetConfig();
+	const PShader& pShader = pipeline.GetShader();
 
-	GetViewportStateInfo(handles.Info, context);
+	vk::PipelineInputAssemblyStateCreateInfo assemblyInfo = GetAssemblyStateInfo(pConfig);
+	vk::PipelineVertexInputStateCreateInfo vertexInputInfo = GetVertexInputStateInfo(pConfig);
+	std::vector<vk::PipelineShaderStageCreateInfo> pipelineStages = GetPipelineStages(handles, pShader);
+	vk::PipelineRasterizationStateCreateInfo rasterizer = GetRasterizerStateInfo(pConfig);
+	vk::PipelineDepthStencilStateCreateInfo depthStencilState = GetDepthStencilStateInfo(pConfig);
+	vk::PipelineMultisampleStateCreateInfo sampleState = GetSampleStateInfo(pConfig);
+	vk::PipelineColorBlendStateCreateInfo blendState = GetBlendStateInfo(pConfig);
+
 	vk::PipelineViewportStateCreateInfo viewportState{};
-	viewportState.setViewports(handles.Info.Viewport);
-	viewportState.setScissors(handles.Info.Scissor);
+	viewportState.setViewports(pConfig.CanvasView);
+	viewportState.setScissors(pConfig.CanvasScissor);
 
-	// TODO: Directly create a descriptor writer...
-	auto layoutData = CreatePipelineLayout(context);
+	auto layoutData = CreatePipelineLayout(pShader);
 
-	vk::GraphicsPipelineCreateInfo createInfo{};
+	vk::GraphicsPipelineCreateInfo hRawCreateInfo{};
 
-	createInfo.setPInputAssemblyState(&assemblyInfo);
-	createInfo.setPVertexInputState(&vertexInputInfo);
-	createInfo.setStages(pipelineStages);
-	createInfo.setPRasterizationState(&rasterizer);
-	createInfo.setPDepthStencilState(&depthStencilState);
-	createInfo.setPMultisampleState(&sampleState);
-	createInfo.setPColorBlendState(&blendState);
-	createInfo.setPViewportState(&viewportState);
-	createInfo.setRenderPass(context.GetRenderContext().GetData().RenderPass);
-	createInfo.setLayout(layoutData.Layout);
-	createInfo.setSubpass(context.GetSubpassIndex());
+	hRawCreateInfo.setPInputAssemblyState(&assemblyInfo);
+	hRawCreateInfo.setStages(pipelineStages);
+	hRawCreateInfo.setPVertexInputState(&vertexInputInfo);
+	hRawCreateInfo.setPRasterizationState(&rasterizer);
+	hRawCreateInfo.setPDepthStencilState(&depthStencilState);
+	hRawCreateInfo.setPMultisampleState(&sampleState);
+	hRawCreateInfo.setPColorBlendState(&blendState);
+	hRawCreateInfo.setPViewportState(&viewportState);
+	hRawCreateInfo.setRenderPass(pConfig.TargetContext.GetData().RenderPass);
+	hRawCreateInfo.setLayout(layoutData.Layout);
+	hRawCreateInfo.setSubpass(pConfig.SubpassIndex);
 
 	handles.Device = mDevice;
-	handles.Handle = mDevice->createGraphicsPipeline(mData->Cache, createInfo).value;
+	handles.Handle = mDevice->createGraphicsPipeline(mData->Cache, hRawCreateInfo).value;
 	handles.LayoutData = layoutData;
+	handles.TargetContext = pConfig.TargetContext;
 
 	for (const auto& resource : layoutData.DescResources)
 	{
@@ -176,22 +159,18 @@ VK_NAMESPACE::PipelineBuilder::BuildGraphicsPipeline(const PipelineContextType& 
 		handles.DynamicOffsets.push_back(0);
 	}
 
-	auto Data = mData;
+	auto hData = mData;
 
-	GraphicsPipeline<PipelineContextType> pipeline;
-	pipeline.mData = Core::CreateRef(handles, [Data](const GraphicsPipelineHandles& info) 
+	pipeline.mHandles = Core::CreateRef(handles, [hData](const GraphicsPipelineHandles& info) 
 	{ 
 		info.Device->destroyPipeline(info.Handle);
 		info.Device->destroyPipelineLayout(info.LayoutData.Layout);
 	});
 
-	pipeline.mTargetContext = context.GetRenderContext();
-
 	// Init the Base Pipeline...
 	auto DescWriter = DescriptorWriter(mDevice, handles.SetCache);
 
-	pipeline.mPipelineSpecs = std::make_shared<BasicPipelineSpec<PipelineContextType>>(
-		context, std::move(DescWriter));
+	pipeline.mPipelineSpecs = std::make_shared<BasicPipelineSpec>(std::move(DescWriter));
 
 	FreeShaderModules(pipelineStages);
 	delete[] blendState.pAttachments;
@@ -199,33 +178,27 @@ VK_NAMESPACE::PipelineBuilder::BuildGraphicsPipeline(const PipelineContextType& 
 	return pipeline;
 }
 
-template <typename PipelineContextType> vk::PipelineInputAssemblyStateCreateInfo 
-	PipelineBuilder::GetAssemblyStateInfo(
-	GraphicsPipelineInfo& Info, const PipelineContextType& config) const
+vk::PipelineInputAssemblyStateCreateInfo 
+	PipelineBuilder::GetAssemblyStateInfo(const GraphicsPipelineConfig& config) const
 {
-	Info.Topology = config.GetPrimitiveTopology();
 	vk::PipelineInputAssemblyStateCreateInfo result;
-	result.setTopology(Info.Topology);
+	result.setTopology(config.Topology);
 	return result;
 }
 
-template <typename PipelineContextType> 
-vk::PipelineVertexInputStateCreateInfo PipelineBuilder::GetVertexInputStateInfo(
-	GraphicsPipelineInfo& Info, const PipelineContextType& config) const
+vk::PipelineVertexInputStateCreateInfo PipelineBuilder::GetVertexInputStateInfo(const GraphicsPipelineConfig& config) const
 {
-	Info.VertexInputState = config.GetVertexInputStateInfo();
-
 	vk::PipelineVertexInputStateCreateInfo result;
-	result.setVertexAttributeDescriptions(Info.VertexInputState.Attributes);
-	result.setVertexBindingDescriptions(Info.VertexInputState.Bindings);
+	result.setVertexAttributeDescriptions(config.VertexInput.Attributes);
+	result.setVertexBindingDescriptions(config.VertexInput.Bindings);
 
 	return result;
 }
 
-template <typename PipelineContextType> std::vector <vk::PipelineShaderStageCreateInfo> 
-	PipelineBuilder::GetPipelineStages(PipelineInfo& Info, const PipelineContextType& config) const
+std::vector <vk::PipelineShaderStageCreateInfo>
+	PipelineBuilder::GetPipelineStages(PipelineInfo& Info, const PShader& shader) const
 {
-	Info.ShaderStages = config.GetShaderByteCodes();
+	Info.ShaderStages = shader.GetShaderByteCodes();
 
 	std::vector<vk::PipelineShaderStageCreateInfo> result;
 	result.reserve(Info.ShaderStages.size());
@@ -239,17 +212,14 @@ template <typename PipelineContextType> std::vector <vk::PipelineShaderStageCrea
 	return result;
 }
 
-template <typename PipelineContextType> 
-vk::PipelineRasterizationStateCreateInfo PipelineBuilder::GetRasterizerStateInfo(
-	GraphicsPipelineInfo& Info, const PipelineContextType& config) const
+vk::PipelineRasterizationStateCreateInfo PipelineBuilder::GetRasterizerStateInfo(const GraphicsPipelineConfig& config) const
 {
-	Info.Rasterizer = config.GetRasterizerStateInfo();
 	vk::PipelineRasterizationStateCreateInfo result;
 
-	result.setCullMode(Info.Rasterizer.CullMode);
-	result.setLineWidth(Info.Rasterizer.LineWidth);
-	result.setFrontFace(Info.Rasterizer.FrontFace);
-	result.setPolygonMode(Info.Rasterizer.PolygonMode);
+	result.setCullMode(config.Rasterizer.CullMode);
+	result.setLineWidth(config.Rasterizer.LineWidth);
+	result.setFrontFace(config.Rasterizer.FrontFace);
+	result.setPolygonMode(config.Rasterizer.PolygonMode);
 
 	result.setDepthBiasClamp(0.0f);
 	result.setDepthBiasConstantFactor(0.0f);
@@ -260,30 +230,25 @@ vk::PipelineRasterizationStateCreateInfo PipelineBuilder::GetRasterizerStateInfo
 	return result;
 }
 
-template <typename PipelineContextType>
 vk::PipelineDepthStencilStateCreateInfo VK_NAMESPACE::PipelineBuilder::GetDepthStencilStateInfo(
-	GraphicsPipelineInfo& Info, const PipelineContextType& config) const
+	const GraphicsPipelineConfig& Info) const
 {
-	Info.DepthBufferingInfo = config.GetDepthStencilStateInfo();
-
 	vk::PipelineDepthStencilStateCreateInfo state{};
-	state.setDepthTestEnable(Info.DepthBufferingInfo.DepthTestEnable);
-	state.setDepthCompareOp(Info.DepthBufferingInfo.DepthCompareOp);
-	state.setDepthWriteEnable(Info.DepthBufferingInfo.DepthWriteEnable);
-	state.setDepthBoundsTestEnable(Info.DepthBufferingInfo.DepthBoundsTestEnable);
-	state.setMinDepthBounds(Info.DepthBufferingInfo.MinDepthBounds);
-	state.setMaxDepthBounds(Info.DepthBufferingInfo.MaxDepthBounds);
-	state.setStencilTestEnable(Info.DepthBufferingInfo.StencilTestEnable);
-	state.setFront(Info.DepthBufferingInfo.StencilFrontOp);
-	state.setBack(Info.DepthBufferingInfo.StencilBackOp);
-	state.setStencilTestEnable(Info.DepthBufferingInfo.StencilTestEnable);
+	state.setDepthTestEnable(Info.DepthBufferingState.DepthTestEnable);
+	state.setDepthCompareOp(Info.DepthBufferingState.DepthCompareOp);
+	state.setDepthWriteEnable(Info.DepthBufferingState.DepthWriteEnable);
+	state.setDepthBoundsTestEnable(Info.DepthBufferingState.DepthBoundsTestEnable);
+	state.setMinDepthBounds(Info.DepthBufferingState.MinDepthBounds);
+	state.setMaxDepthBounds(Info.DepthBufferingState.MaxDepthBounds);
+	state.setStencilTestEnable(Info.DepthBufferingState.StencilTestEnable);
+	state.setFront(Info.DepthBufferingState.StencilFrontOp);
+	state.setBack(Info.DepthBufferingState.StencilBackOp);
+	state.setStencilTestEnable(Info.DepthBufferingState.StencilTestEnable);
 
 	return state;
 }
 
-template <typename PipelineContextType> 
-vk::PipelineMultisampleStateCreateInfo PipelineBuilder::GetSampleStateInfo(
-	GraphicsPipelineInfo& Info, const PipelineContextType& config) const
+vk::PipelineMultisampleStateCreateInfo PipelineBuilder::GetSampleStateInfo(const GraphicsPipelineConfig& config) const
 {
 	vk::PipelineMultisampleStateCreateInfo result;
 	result.setSampleShadingEnable(VK_TRUE);
@@ -296,13 +261,11 @@ vk::PipelineMultisampleStateCreateInfo PipelineBuilder::GetSampleStateInfo(
 	return result;
 }
 
-template <typename PipelineContextType> 
-vk::PipelineColorBlendStateCreateInfo PipelineBuilder::GetBlendStateInfo(
-	GraphicsPipelineInfo& Info, const PipelineContextType& config) const
+vk::PipelineColorBlendStateCreateInfo PipelineBuilder::GetBlendStateInfo(const GraphicsPipelineConfig& config) const
 {
 	// NOTE: For now, the user has no control over blending functions
 
-	uint32_t count = config.mBasicConfig.TargetContext.GetColorAttachmentCount();
+	uint32_t count = config.TargetContext.GetColorAttachmentCount();
 
 	vk::PipelineColorBlendAttachmentState attachmentState{};
 	attachmentState.setAlphaBlendOp(vk::BlendOp::eAdd);
@@ -335,31 +298,21 @@ vk::PipelineColorBlendStateCreateInfo PipelineBuilder::GetBlendStateInfo(
 	return result;
 }
 
-template <typename PipelineContextType> 
-void PipelineBuilder::GetViewportStateInfo(
-	GraphicsPipelineInfo& Info, const PipelineContextType& config) const
-{
-	auto [Viewport, Scissor] = config.GetViewportAndScissorInfo();
-	Info.Viewport = Viewport;
-	Info.Scissor = Scissor;
-}
-
-template <typename PipelineContextType> 
-PipelineLayoutData PipelineBuilder::CreatePipelineLayout(const PipelineContextType& config) const
+PipelineLayoutData PipelineBuilder::CreatePipelineLayout(const PShader& shader) const
 {
 	Core::DescriptorSetAllocator DescAllocator = mDescPoolManager.FetchAllocator({});
 	std::vector<Core::Ref<DescriptorResource>> resources;
 
 	std::vector<vk::DescriptorSetLayout> setLayouts;
 
-	auto [setLayoutInfos, pushConstantInfos] = config.GetPipelineLayoutInfo();
+	auto [setLayoutInfos, pushConstantInfos] = shader.GetPipelineLayoutInfo();
 
 	setLayouts.resize(setLayoutInfos.size());
 	resources.resize(setLayoutInfos.size());
 
 	for (auto& setInfo : setLayoutInfos)
 	{
-		// FIX ME: Doesn't work if the sets aren't in consecutive order...
+		// FIX ME: Doesn't work if sets aren't in consecutive order...
 		Core::Ref<DescriptorResource> setResource = DescAllocator.Allocate(setInfo.second);
 		resources[setInfo.first] = setResource;
 		setLayouts[setInfo.first] = setResource->Layout;
@@ -372,6 +325,12 @@ PipelineLayoutData PipelineBuilder::CreatePipelineLayout(const PipelineContextTy
 	vk::PipelineLayout layout = mDevice->createPipelineLayout(layoutInfo);
 
 	return { layout, resources, pushConstantInfos };
+}
+
+void PipelineBuilder::FreeShaderModules(const std::vector<vk::PipelineShaderStageCreateInfo>& shaders) const
+{
+	for (const auto& shader : shaders)
+		mDevice->destroyShaderModule(shader.module);
 }
 
 VK_END

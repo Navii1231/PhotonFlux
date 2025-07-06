@@ -1,8 +1,15 @@
 
---> Writing a generic deferred pipeline
---> Incorporating different kinds of shading models
+Currently: testing the deferred and shading pipelines
+
+Ideas and Suggestions: 
+--> We could store all the renderables in one place, and copy them into the
+	GPU memory all at once when required
+
+Implementation:
+--> Writing a generic deferred pipeline (deferred pipeline and shading pipeline; done)
+--> Incorporating different kinds of shading models (material system class)
 --> Generating a fragment shader and a deferred pipeline 
-	corresponding to a shading model
+	corresponding to a shading model (shader generator class)
 
 --> Writing generic material system
 	
@@ -14,7 +21,11 @@
 	* how those parameters are used and what resources 
 	* are required in shading the model. In other words, 
 	* we want a material system which can translate this graph into a 
-	* parameterized shader that we can run on the GPU" -- From AquaFlow\Inlude\Geometry3D\Geometry3D.h
+	* parameterized shader that we can run on the GPU" -- From AquaFlow\Include\Geometry3D\Geometry3D.h
+
+--> The MaterialSystem class can read a node graph, a material file, or a hand-written shader
+	and it can generate MaterialInstance class that will hold the shading logic (the rasterization 
+	and ray tracing pipelines) as well as the node graph and the shader parameters
 	
 --> Including compute pipelines for shading stage of deferred rendering
 	which will allow us to run arbitrary materials on the GPU
@@ -31,9 +42,9 @@
 
 
 --> Expand the expr parser, where you have to include
-	-- declaration nodes (done)
-	-- assignment nodes (assignment done, but comparison is still remaining)
-	-- maths and boolean expression nodes (done)
+	-- declaration nodes; done
+	-- assignment nodes (assignment: done, but comparison is still remaining)
+	-- maths and boolean expression nodes; done
 
 ExprParser, right now, does not account for all kinds for exprs.
 You will expand the ExprParser, and the first part of the 

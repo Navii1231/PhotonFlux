@@ -3,6 +3,7 @@
 
 VK_BEGIN
 
+// TODO: Class is incomplete
 class ImageView
 {
 public:

@@ -3,18 +3,6 @@
 #include "../Core/Config.h"
 #include "../Core/Ref.h"
 
-// Multi threading...
-#include <thread>
-#include <mutex>
-#include <semaphore>
-#include <condition_variable>
-#include <future>
-#include <atomic>
-
-// Data structures
-#include <unordered_map>
-#include <queue>
-
 VK_BEGIN
 class QueueManager;
 
@@ -25,6 +13,7 @@ class Queue;
 using QueueFamilyIndices = std::set<uint32_t>;
 // QueueCapability --> Family Indices
 using QueueIndexMap = std::unordered_map<vk::QueueFlagBits, std::set<uint32_t>>;
+using CommandBufferSet = std::set<vk::CommandBuffer>;
 
 template <typename T>
 using QueueFamilyMap = std::unordered_map<uint32_t, T>;

@@ -1,15 +1,13 @@
 #include "ComputeEstimator.h"
 
 PH_FLUX_NAMESPACE::ComputeEstimator::ComputeEstimator(const EstimatorCreateInfo& createInfo)
-	: mDevice(createInfo.Context), mShaderDirectory(createInfo.ShaderDirectory)
+	: mCtx(createInfo.Context), mShaderDirectory(createInfo.ShaderDirectory)
 {
 	mPresentableSize = createInfo.TargetResolution;
 	mTileSize = createInfo.TileSize;
 
-	mPipelineBuilder = mDevice.MakePipelineBuilder();
-	mMemoryManager = mDevice.MakeMemoryResourceManager();
-
-	mSettings = std::make_shared<ComputePipelineSettings>(mMemoryManager);
+	mPipelineBuilder = mCtx.MakePipelineBuilder();
+	mMemoryManager = mCtx.CreateResourcePool();
 
 	GenerateTiles(createInfo.TileSize);
 
@@ -25,8 +23,25 @@ PH_FLUX_NAMESPACE::ComputeEstimator::ComputeEstimator(const EstimatorCreateInfo&
 	imageInfo.Format = vk::Format::eR8G8B8A8Unorm;
 	mCameraView = mMemoryManager.CreateImage(imageInfo);
 
-	mSettings->mTarget.Presentable = mPresentable;
-	mSettings->mTarget.ImageResolution = mPresentableSize;
+	vkEngine::PShader shader;
+
+	auto directory = mShaderDirectory;
+	directory.append("main.comp");
+
+	shader.AddMacro("STACK_SIZE", std::to_string(mEstimator.mSceneData.MaxBounceLimit + 2));
+	shader.AddMacro("_DEBUG", "0");
+	shader.AddMacro("SMOOTH_SHADE", "1");
+
+	shader.SetFilepath("eCompute", directory.string());
+
+	auto errors = shader.CompileShaders();
+
+	CheckErrors(errors);
+
+	mEstimator = mPipelineBuilder.BuildComputePipeline<EstimatorComputePipeline>(shader, mMemoryManager);
+
+	mEstimator.mTarget.Presentable = mPresentable;
+	mEstimator.mTarget.ImageResolution = mPresentableSize;
 
 	mPresentable.TransitionLayout(vk::ImageLayout::eGeneral, 
 		vk::PipelineStageFlagBits::eComputeShader);
@@ -39,127 +54,93 @@ void PH_FLUX_NAMESPACE::ComputeEstimator::Begin(const TraceInfo& beginInfo)
 {
 	mTraceInfo = beginInfo;
 
-	mSettings->mCameraData.mCamera = beginInfo.CameraInfo;
+	mEstimator.mCameraData.mCamera = beginInfo.CameraInfo;
 
-	mSettings->mSceneData.FrameCount = 1;
-	mSettings->mSceneData.MinBounceLimit = beginInfo.MinBounceLimit;
-	mSettings->mSceneData.MaxBounceLimit = beginInfo.MaxBounceLimit;
-	mSettings->mSceneData.PixelSamples = beginInfo.PixelSamplesPerBatch;
-	mSettings->mSceneData.ResetImage = 1;
-	mSettings->mSceneData.RandomSeed = rand();
-	mSettings->mSceneData.MaxSamples = beginInfo.MaxSamples;
+	mEstimator.mSceneData.FrameCount = 1;
+	mEstimator.mSceneData.MinBounceLimit = beginInfo.MinBounceLimit;
+	mEstimator.mSceneData.MaxBounceLimit = beginInfo.MaxBounceLimit;
+	mEstimator.mSceneData.PixelSamples = beginInfo.PixelSamplesPerBatch;
+	mEstimator.mSceneData.ResetImage = 1;
+	mEstimator.mSceneData.RandomSeed = rand();
+	mEstimator.mSceneData.MaxSamples = beginInfo.MaxSamples;
 }
 
 void PH_FLUX_NAMESPACE::ComputeEstimator::SubmitRenderable(
-	const MeshData& data, const Material& material, RenderableType type)
+	const AquaFlow::MeshData& data, const Material& material, RenderableType type)
 {
-	mSettings->SubmitRenderable(data, material, type, mTraceInfo.BVH_Depth);
+	mEstimator.SubmitRenderable(data, material, type, mTraceInfo.BVH_Depth);
 }
 
 void PH_FLUX_NAMESPACE::ComputeEstimator::End()
 {
-	// TODO: Validate the path tracer configuration and the scene
+	// TODO: Reset the transmission weight to zero for objects containing holes
 
-	// Reset the transmission weight to zero for objects containing holes
-	// Check if the camera is inside an object and initialize the refractive index stack
-
-	auto directory = mShaderDirectory;
-	directory.append("main.comp");
-
-	vkEngine::ShaderInput input;
-	input.FilePath = directory.string();
-	input.Stage = vk::ShaderStageFlagBits::eCompute;
-	input.OptimizationFlag = vkEngine::OptimizerFlag::eO3;
-
-	std::string StackSize = std::to_string(mSettings->mSceneData.MaxBounceLimit + 2);
-
-	mSettings->AddMacro("STACK_SIZE", StackSize);
-	mSettings->AddMacro("_DEBUG", "0");
-	mSettings->AddMacro("WAVEFRONT_RAY_COUNT", "16");
-
-	auto errors = mSettings->CompileShaders({ input });
-
-	CheckErrors(errors);
-
-	mEstimator = mPipelineBuilder.BuildComputePipeline(*mSettings);
 }
 
 PH_FLUX_NAMESPACE::TraceResult PH_FLUX_NAMESPACE::ComputeEstimator::Trace(vk::CommandBuffer buffer)
 {
-	auto& settings = mEstimator.GetConfigSettings();
+	auto& context = mEstimator;
 
 	glm::uvec2 ImageResolution;
 
 	if (!mCameraSet)
 	{
-		settings.mTarget.PixelMean = mTileImages[mTileIndex];
+		mEstimator.mTarget.PixelMean = mTileImages[mTileIndex];
 		ImageResolution = mTiles[mTileIndex].Max - mTiles[mTileIndex].Min;
 
-		settings.mSceneData.MinBound = mTiles[mTileIndex].Min;
-		settings.mSceneData.MaxBound = mTiles[mTileIndex].Max;
-		settings.mSceneData.ImageResolution = mPresentableSize;
+		mEstimator.mSceneData.MinBound = mTiles[mTileIndex].Min;
+		mEstimator.mSceneData.MaxBound = mTiles[mTileIndex].Max;
+		mEstimator.mSceneData.ImageResolution = mPresentableSize;
 	}
 	else
 	{
-		settings.mTarget.PixelMean = mCameraView;
+		mEstimator.mTarget.PixelMean = mCameraView;
 		ImageResolution = mPresentableSize;
 
-		settings.mSceneData.MinBound = { 0, 0 };
-		settings.mSceneData.MaxBound = mPresentableSize;
-		settings.mSceneData.ImageResolution = mPresentableSize;
+		mEstimator.mSceneData.MinBound = { 0, 0 };
+		mEstimator.mSceneData.MaxBound = mPresentableSize;
+		mEstimator.mSceneData.ImageResolution = mPresentableSize;
 	}
 
 	// Dispatch compute shader...
-	settings.mTarget.Presentable.TransitionLayout(
-		settings.mBufferLayout, vk::PipelineStageFlagBits::eTopOfPipe);
+	mEstimator.mTarget.Presentable.TransitionLayout(
+		context.mBufferLayout, vk::PipelineStageFlagBits::eTopOfPipe);
 
-	settings.mTarget.PixelMean.TransitionLayout(
-		settings.mBufferLayout, vk::PipelineStageFlagBits::eTopOfPipe);
+	mEstimator.mTarget.PixelMean.TransitionLayout(
+		mEstimator.mBufferLayout, vk::PipelineStageFlagBits::eTopOfPipe);
 
 	bool IsCameraMoving = mCameraSet;
 	mCameraSet = false;
 
 	glm::uvec3 WorkGroups = glm::uvec3(ImageResolution.x, ImageResolution.y, 1) / 
-		settings.GetWorkGroupSize();
+		mEstimator.GetWorkGroupSize();
 
 	WorkGroups += glm::uvec3(1, 1, 0);
 
-	vk::BufferMemoryBarrier barrier;
-	barrier.setBuffer(settings.mVerticesLocal.GetNativeHandles().Handle);
-	barrier.setSrcAccessMask(vk::AccessFlagBits::eTransferWrite);
-	barrier.setDstAccessMask(vk::AccessFlagBits::eShaderRead);
-	barrier.setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
-	barrier.setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
-	barrier.setSize(VK_WHOLE_SIZE);
-
-	buffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
-		vk::PipelineStageFlagBits::eComputeShader,
-		vk::DependencyFlags(), nullptr, barrier, nullptr);
-
-	barrier.setBuffer(settings.mFacesLocal.GetNativeHandles().Handle);
-
-	buffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
-		vk::PipelineStageFlagBits::eComputeShader,
-		vk::DependencyFlags(), nullptr, barrier, nullptr);
-
 	uint32_t Finished = false;
-	settings.mCPU_Feedback.FetchMemory(&Finished, &Finished + 1, 0);
+	context.mCPU_Feedback.FetchMemory(&Finished, &Finished + 1, 0);
 
 	if (Finished == 0)
 	{
 		Finished = 1;
-		settings.mCPU_Feedback.SetBuf(&Finished, &Finished + 1, 0);
-		mEstimator.Dispatch(buffer, WorkGroups);
+		mEstimator.mCPU_Feedback.SetBuf(&Finished, &Finished + 1, 0);
 
-		settings.mSceneData.ResetImage = IsCameraMoving;
+		mEstimator.UpdateDescriptors();
+
+		mEstimator.Begin(buffer);
+		mEstimator.BindPipeline();
+		mEstimator.Dispatch(WorkGroups);
+		mEstimator.End();
+
+		context.mSceneData.ResetImage = IsCameraMoving;
 
 		if(!IsCameraMoving)
-			settings.mSceneData.FrameCount++;
+			context.mSceneData.FrameCount++;
 		else
-			settings.mSceneData.FrameCount = 1;
+			context.mSceneData.FrameCount = 1;
 
-		settings.mSceneData.MaxBounceLimit = mTraceInfo.MaxBounceLimit;
-		settings.mSceneData.PixelSamples = mTraceInfo.PixelSamplesPerBatch;
+		context.mSceneData.MaxBounceLimit = mTraceInfo.MaxBounceLimit;
+		context.mSceneData.PixelSamples = mTraceInfo.PixelSamplesPerBatch;
 
 		return TraceResult::ePending;
 	}
@@ -169,26 +150,25 @@ PH_FLUX_NAMESPACE::TraceResult PH_FLUX_NAMESPACE::ComputeEstimator::Trace(vk::Co
 
 	mTileIndex--;
 
-	settings.mSceneData.ResetImage = 1;
-	settings.mSceneData.FrameCount = 1;
-	settings.mSceneData.MaxBounceLimit = mTraceInfo.MaxBounceLimit;
-	settings.mSceneData.PixelSamples = mTraceInfo.PixelSamplesPerBatch;
+	context.mSceneData.ResetImage = 1;
+	context.mSceneData.FrameCount = 1;
+	context.mSceneData.MaxBounceLimit = mTraceInfo.MaxBounceLimit;
+	context.mSceneData.PixelSamples = mTraceInfo.PixelSamplesPerBatch;
 
 	Finished = 0;
-	settings.mCPU_Feedback.SetBuf(&Finished, &Finished + 1, 0);
+	context.mCPU_Feedback.SetBuf(&Finished, &Finished + 1, 0);
 
 	return TraceResult::ePending;
 }
 
 void PH_FLUX_NAMESPACE::ComputeEstimator::SetCamera(const Camera& camera)
 {
-	auto& settings = mEstimator.GetConfigSettings();
-	settings.mCameraData.mCamera = camera;
+	mEstimator.mCameraData.mCamera = camera;
 
-	settings.mSceneData.FrameCount = 1;
-	settings.mSceneData.ResetImage = 1;
-	settings.mSceneData.MaxBounceLimit = settings.mResetBounceLimit;
-	settings.mSceneData.PixelSamples = settings.mResetSampleCount;
+	mEstimator.mSceneData.FrameCount = 1;
+	mEstimator.mSceneData.ResetImage = 1;
+	mEstimator.mSceneData.MaxBounceLimit = mEstimator.mResetBounceLimit;
+	mEstimator.mSceneData.PixelSamples = mEstimator.mResetSampleCount;
 
 	mCameraSet = true;
 	mTileIndex = mTiles.size() - 1;

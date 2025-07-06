@@ -1,20 +1,23 @@
 #pragma once
 #include "MemoryConfig.h"
-#include "glm/glm.hpp"
-
 #include "Image.h"
 
 #include "../Core/Utils/FramebufferUtils.h"
 
 VK_BEGIN
 
+class RenderTargetContext;
+
 struct FramebufferData
 {
 	vk::Framebuffer Handle;
+
+	// TODO: There should be a way to get the full parent context instance
 	Core::Ref<RenderContextData> ParentContextData;
 
 	std::vector<Image> ColorAttachments;
-	// We can only have one depth stencil attachment...
+
+	// Vulkan supports only single depth/stencil attachment per framebuffer...
 	Image DepthStencilAttachment;
 
 	std::vector<vk::ImageView> ColorAttachmentViews;
@@ -35,7 +38,7 @@ struct BlitInfo
 	ImageBlitInfo BlitInfo;
 };
 
-class Framebuffer
+class Framebuffer : public RecordableResource
 {
 public:
 	Framebuffer() = default;
@@ -44,14 +47,15 @@ public:
 	void TransitionDepthAttachmentLayouts(vk::ImageLayout newLayout, vk::PipelineStageFlags newStage) const;
 
 	// Recording of resources manipulation...
-	void BeginCommands(vk::CommandBuffer commandBuffer) const;
+	virtual void BeginCommands(vk::CommandBuffer commandBuffer) const override;
 
 	void RecordTransitionColorAttachmentLayouts(vk::ImageLayout newLayout, vk::PipelineStageFlags newStages) const;
 	void RecordTransitionDepthStencilAttachmentLayouts(
 		vk::ImageLayout newLayout, vk::PipelineStageFlags newStages) const;
 
 	void RecordBlit(const Framebuffer& src, const BlitInfo& blitInfo, bool retrievePreviousLayout = true) const;
-	void EndCommands() const;
+
+	virtual void EndCommands() const override;
 
 	const FramebufferData& GetFramebufferData() const { return *mData; }
 	vk::Framebuffer GetNativeHandle() const { return mData->Handle; }
@@ -68,15 +72,13 @@ private:
 	Core::Ref<FramebufferData> mData;
 	Core::Ref<vk::Device> mDevice;
 
-	ProcessManager mProcessHandler;
-
 	// Transition internal state...
 
 	friend class RenderTargetContext;
 	friend class Swapchain;
 
 	template <typename PipelineContextType, typename BasePipeline>
-	friend class GraphicsPipeline;
+	friend class BasicGraphicsPipeline;
 
 	template <typename Fn>
 	void TraverseAllAttachments(Fn&& fn);

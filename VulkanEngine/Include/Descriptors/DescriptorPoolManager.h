@@ -21,7 +21,7 @@ public:
 private:
 	Core::DescriptorPoolBuilder mPoolBuilder;
 
-	friend class Device;
+	friend class Context;
 };
 
 VK_END

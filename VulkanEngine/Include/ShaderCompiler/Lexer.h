@@ -1,8 +1,6 @@
 #pragma once
 #include "ShaderConfig.h"
 
-#include <vector>
-
 VK_BEGIN
 
 struct Token

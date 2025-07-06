@@ -1,13 +1,16 @@
 #pragma once
 #include "RayTracingStructures.h"
+#include "Utils/CompilerErrorChecker.h"
 
 AQUA_BEGIN
 PH_BEGIN
 
 extern std::string GetMergeSortCode();
 
+// TODO: change required
+
 template <typename CompType>
-class MergeSorterPassContext : public vkEngine::ComputePipelineContext
+class MergeSorterPass : public vkEngine::ComputePipeline
 {
 public:
 	using MyRefType = CompType;
@@ -19,12 +22,12 @@ public:
 	};
 
 public:
-	MergeSorterPassContext();
+	MergeSorterPass() = default;
+	MergeSorterPass(uint32_t workGroupSize);
 
-	void CompileShader(uint32_t workGroupSize);
-	virtual void UpdateDescriptors(vkEngine::DescriptorWriter& writer);
+	virtual void UpdateDescriptors() override;
 
-	void UploadBuffer(const vkEngine::Buffer<ArrayRef>& buffer)
+	void SetBuffer(const vkEngine::Buffer<ArrayRef>& buffer)
 		{ mBuffer = buffer; }
 
 	vkEngine::Buffer<uint32_t> GetBufferData() const { return mBuffer; }
@@ -33,15 +36,16 @@ public:
 private:
 
 	vkEngine::Buffer<ArrayRef> mBuffer;
-
 	std::string mTypeIdString;
+
+private:
+	// Helper method
+
+	void CompileShader(uint32_t workGroupSize);
 };
 
-template <typename CompType>
-using MergeSorterPass = vkEngine::ComputePipeline<MergeSorterPassContext<CompType>>;
-
 template<typename CompType>
-inline MergeSorterPassContext<CompType>::MergeSorterPassContext()
+MergeSorterPass<CompType>::MergeSorterPass(uint32_t workGroupSize)
 {
 	auto AssignTypeIdName = [this](size_t TypeID, const std::string& AssignedName)
 	{
@@ -55,37 +59,37 @@ inline MergeSorterPassContext<CompType>::MergeSorterPassContext()
 
 	if (mTypeIdString.empty())
 		mTypeIdString = "InvalidType";
+
+	vkEngine::PShader shader{};
+
+	CompileShader(workGroupSize);
 }
 
 template<typename CompType>
-inline void MergeSorterPassContext<CompType>::CompileShader(uint32_t workGroupSize)
+inline void MergeSorterPass<CompType>::CompileShader(uint32_t workGroupSize)
 {
-	// Setting up the necessary macros before compiling shader
-	AddMacro("WORKGROUP_SIZE", std::to_string(workGroupSize));
-	AddMacro("PRIMITIVE_TYPE", mTypeIdString);
+	vkEngine::PShader shader;
 
-	// Preparing to compile
-	vkEngine::ShaderInput Input;
-	Input.SrcCode = GetMergeSortCode();
-	Input.OptimizationFlag = vkEngine::OptimizerFlag::eO3;
-	Input.Stage = vk::ShaderStageFlagBits::eCompute;
+	// Setting up the necessary macros before compiling shader
+	shader.AddMacro("WORKGROUP_SIZE", std::to_string(workGroupSize));
+	shader.AddMacro("PRIMITIVE_TYPE", mTypeIdString);
+
+	shader.SetShader("eCompute", GetMergeSortCode(), vkEngine::OptimizerFlag::eO3);
 
 	// Compile the shader
-	auto CompilationResults = CompileShaders({ Input });
+	auto Errors = shader.CompileShaders();
 
-	if (CompilationResults[0].Type != vkEngine::ErrorType::eNone)
-	{
-		vkEngine::WriteFile("D:/Dev/VulkanEngine/vkEngineTester/Logging/ShaderFails/Shader.glsl"
-			, CompilationResults[0].SrcCode);
-		std::cout << CompilationResults[0].Info << std::endl;
+	CompileErrorChecker checker("../vkEngineTester/Logging/ShaderFails/Shader.glsl");
+	auto ErrorInfos = checker.GetErrors(Errors);
 
-		_STL_ASSERT(false, "Failed to compile the merge sort glsl code!");
-	}
+	this->SetShader(shader);
 }
 
 template<typename CompType>
-inline void MergeSorterPassContext<CompType>::UpdateDescriptors(vkEngine::DescriptorWriter& writer)
+inline void MergeSorterPass<CompType>::UpdateDescriptors()
 {
+	vkEngine::DescriptorWriter& writer = this->GetDescriptorWriter();
+
 	vkEngine::StorageBufferWriteInfo bufferInfo{};
 	bufferInfo.Buffer = mBuffer.GetNativeHandles().Handle;
 

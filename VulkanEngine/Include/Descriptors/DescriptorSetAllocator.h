@@ -8,6 +8,7 @@ class DescriptorPoolManager;
 
 VK_CORE_BEGIN
 
+// Warning: not thread safe
 class DescriptorSetAllocator
 {
 public:

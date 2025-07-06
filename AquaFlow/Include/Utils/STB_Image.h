@@ -7,7 +7,7 @@ AQUA_BEGIN
 class StbImage
 {
 public:
-	void SetMemoryManager(vkEngine::MemoryResourceManager manager) { mMemoryManager = manager; }
+	void SetResourcePool(vkEngine::ResourcePool manager) { mResourcePool = manager; }
 
 	inline vkEngine::Image CreateImageBuffer(const std::string& filepath);
 
@@ -19,7 +19,7 @@ public:
 	void SetMemProps(vk::MemoryPropertyFlags val) { mMemProps = val; }
 
 private:
-	vkEngine::MemoryResourceManager mMemoryManager;
+	vkEngine::ResourcePool mResourcePool;
 
 	// Image metadata...
 	vk::Format mFormat = vk::Format::eR8G8B8A8Unorm;
@@ -39,14 +39,13 @@ inline vkEngine::Image StbImage::CreateImageBuffer(const std::string& filepath)
 	if (!result)
 		return vkEngine::Image{};
 
-	vkEngine::BufferCreateInfo bufferInfo{};
-	bufferInfo.Size = width * height * 4;
-	bufferInfo.MemProps = vk::MemoryPropertyFlagBits::eHostCoherent;
+	vkEngine::Buffer<int> image_buffer = mResourcePool.CreateBuffer<int>(
+		vk::BufferUsageFlagBits::eStorageBuffer, vk::MemoryPropertyFlagBits::eHostCoherent);
 
-	vkEngine::Buffer<int> image_buffer = mMemoryManager.CreateBuffer<int>(bufferInfo);
+	image_buffer.Resize(width * height * 4);
 
-	int* buf = image_buffer.MapMemory(bufferInfo.Size);
-	std::memcpy(buf, result, bufferInfo.Size);
+	int* buf = image_buffer.MapMemory(image_buffer.GetSize());
+	std::memcpy(buf, result, image_buffer.GetSize());
 	image_buffer.UnmapMemory();
 
 	stbi_image_free(result);
@@ -59,7 +58,7 @@ inline vkEngine::Image StbImage::CreateImageBuffer(const std::string& filepath)
 
 	createInfo.Extent = vk::Extent3D(width, height, 1);
 
-	vkEngine::Image image = mMemoryManager.CreateImage(createInfo);
+	vkEngine::Image image = mResourcePool.CreateImage(createInfo);
 	
 	image.TransitionLayout(vk::ImageLayout::eGeneral, vk::PipelineStageFlagBits::eComputeShader);
 	image.CopyBufferData(image_buffer);

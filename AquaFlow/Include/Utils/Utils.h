@@ -1,11 +1,6 @@
 #pragma once
 #include "../Core/AqCore.h"
 
-#include <fstream>
-#include <iostream>
-
-#include "glm/glm.hpp"
-
 AQUA_BEGIN
 
 inline bool WriteFile(const std::string& filepath, const std::string& contents)

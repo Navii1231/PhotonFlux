@@ -1,6 +1,5 @@
 #pragma once
 #include "../Core/AqCore.h"
-#include <functional>
 
 AQUA_BEGIN
 

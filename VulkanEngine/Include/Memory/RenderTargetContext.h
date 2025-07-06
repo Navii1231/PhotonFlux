@@ -12,6 +12,9 @@ class RenderTargetContext
 public:
 	RenderTargetContext() = default;
 
+	// TODO: write another implementation of this very function 
+	// where the user can provide the images themselves. Or use this class
+	// as a state machine for storing the image creation information
 	Framebuffer CreateFramebuffer(uint32_t width, uint32_t height) const;
 
 	// TODO: Write another function which can take images from the user
@@ -20,23 +23,30 @@ public:
 	const RenderContextData& GetData() const { return *mData; }
 
 	uint32_t GetColorAttachmentCount() const
-	{ return static_cast<uint32_t>(mData->Info.ColorAttachments.size()); }
+	{ return static_cast<uint32_t>(mData->Info.Attachments.size() - UsingDepthOrStencilAttachment()); }
 
-	const std::vector<vkEngine::ImageAttachmentInfo> GetColorAttachmentInfos() const
-	{ return mData->Info.ColorAttachments; }
+	const std::vector<vkEngine::ImageAttachmentInfo>& GetAttachmentInfos() const
+	{ return mData->Info.Attachments; }
 
 	const vkEngine::ImageAttachmentInfo& GetDepthStencilAttachmentInfos() const
-	{ return mData->Info.DepthStencilAttachment; }
+	{ return mData->Info.Attachments.back(); }
 
 	AttachmentTypeFlags GetAttachmentFlags() const { return mAttachmentFlags; }
+
+	bool UsingDepthOrStencilAttachment() const
+	{ return mData->Info.UsingDepthAttachment || mData->Info.UsingStencilAttachment; }
+
+	QueueManagerRef GetQueueManager() const { return mQueueManager; }
 
 	explicit operator bool() const { return static_cast<bool>(mData); }
 
 private:
 	Core::Ref<RenderContextData> mData;
-
-	ProcessManager mProcessHandler;
 	Core::Ref<vk::Device> mDevice;
+
+	CommandPools mCommandPools;
+	QueueManagerRef mQueueManager;
+
 	vk::PhysicalDevice mPhysicalDevice;
 
 	AttachmentTypeFlags mAttachmentFlags;

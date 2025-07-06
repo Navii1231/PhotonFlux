@@ -33,7 +33,7 @@ private:
 
 	Core::Ref<vk::Device> mDevice;
 
-	friend class Device;
+	friend class Context;
 };
 
 VK_CORE_END

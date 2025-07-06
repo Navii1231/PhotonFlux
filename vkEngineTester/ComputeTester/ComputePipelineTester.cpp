@@ -8,7 +8,7 @@
 
 bool ComputePipelineTester::OnStart()
 {
-	PhFlux::EstimatorCreateInfo createInfo{ *mDevice };
+	PhFlux::EstimatorCreateInfo createInfo{ *mContext };
 	createInfo.ShaderDirectory = "D:/Dev/VulkanEngine/AquaFlow/Include/Shaders/RayTracer";
 	createInfo.TargetResolution = { 1920, 1080 };
 	createInfo.TileSize = { 240, 135 };
@@ -16,16 +16,16 @@ bool ComputePipelineTester::OnStart()
 
 	mEstimator = std::make_shared<PhFlux::ComputeEstimator>(createInfo);
 
-	AquaFlow::PhFlux::WavefrontEstimatorCreateInfo wavefrontCreateInfo{ *mDevice };
+	AquaFlow::PhFlux::WavefrontEstimatorCreateInfo wavefrontCreateInfo{ *mContext };
 	wavefrontCreateInfo.ShaderDirectory = "D:/Dev/VulkanEngine/vkEngineTester/Shaders/Wavefront";
 
 	mWavefrontEstimator = std::make_shared<AquaFlow::PhFlux::WavefrontEstimator>(wavefrontCreateInfo);
 
 	// Builders
-	mPipelineBuilder = mDevice->MakePipelineBuilder();
-	mMemoryResourceManager = mDevice->MakeMemoryResourceManager();
+	mPipelineBuilder = mContext->MakePipelineBuilder();
+	mResourcePool = mContext->CreateResourcePool();
 
-	mRenderContextBuilder = mDevice->FetchRenderContextBuilder(vk::PipelineBindPoint::eGraphics);
+	mRenderContextBuilder = mContext->FetchRenderContextBuilder(vk::PipelineBindPoint::eGraphics);
 
 	vkEngine::ImageAttachmentInfo colorInfo{};
 
@@ -40,19 +40,19 @@ bool ComputePipelineTester::OnStart()
 	depthInfo.Usage = vk::ImageUsageFlagBits::eDepthStencilAttachment;
 
 	vkEngine::RenderContextCreateInfo contextInfo{};
-	contextInfo.ColorAttachments = { colorInfo };
-	contextInfo.DepthStencilAttachment = depthInfo;
+	contextInfo.Attachments = { colorInfo, depthInfo };
 	contextInfo.UsingDepthAttachment = true;
 	contextInfo.UsingStencilAttachment = true;
 
 	mRenderContext = mRenderContextBuilder.MakeContext(contextInfo);
 	mRenderTarget = mRenderContext.CreateFramebuffer(1600, 900);
 
-	mQueueManager = mDevice->GetQueueManager();
-	mComputeWorker = mQueueManager->FetchExecutor(0, vkEngine::QueueAccessType::eGeneric);
+	mComputeWorker = mContext->FetchExecutor(0, vkEngine::QueueAccessType::eGeneric);
+
+	// using same queue family for now
 	mGraphicsWorker = mComputeWorker;
 
-	mSwapchain = mDevice->GetSwapchain();
+	mSwapchain = mContext->GetSwapchain();
 
 	SetupCameras();
 
@@ -500,13 +500,13 @@ void ComputePipelineTester::CreateMaterialPipelines()
 	_VK_ASSERT(FileFound, "Could not read file at: " << directory << "Diffuse.glsl");
 
 	AquaFlow::StbImage imageLoader;
-	imageLoader.SetMemoryManager(mMemoryResourceManager);
+	imageLoader.SetResourcePool(mResourcePool);
 
 	auto image = imageLoader.CreateImageBuffer(imageDirectory + "Chess background.jpg");
 
 	vkEngine::SamplerInfo samplerInfo{};
 
-	auto sampler = mMemoryResourceManager.CreateSampler(samplerInfo);
+	auto sampler = mResourcePool.CreateSampler(samplerInfo);
 
 	image.SetSampler(sampler);
 
@@ -719,6 +719,7 @@ void ComputePipelineTester::PrintWavefrontRayInfoHostBuffer()
 
 void ComputePipelineTester::TestNodeSystem()
 {
+#if 0
 	// Testing expr parser first...
 
 	using namespace AQUA_NAMESPACE;
@@ -744,4 +745,5 @@ void ComputePipelineTester::TestNodeSystem()
 	NodeAST* node = parser.ParseExpr();
 
 	delete node;
+#endif
 }

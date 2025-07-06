@@ -4,6 +4,8 @@
 
 VK_BEGIN
 
+// Change occured: DepthStencil attachment comes at the end of the RenderContextCreateInfo::Attachments
+
 class RenderContextBuilder
 {
 public:
@@ -14,7 +16,7 @@ public:
 		std::vector<Core::ImageAttachmentConfig> configs;
 		AttachmentTypeFlags attachmentFlags = AttachmentTypeFlags();
 
-		for (const auto& attachmentInfo : createInfo.ColorAttachments)
+		for (const auto& attachmentInfo : createInfo.Attachments)
 		{
 			attachmentFlags |= AttachmentTypeFlagBits::eColor;
 			auto& Recent = configs.emplace_back();
@@ -35,18 +37,6 @@ public:
 			attachmentFlags |= (AttachmentTypeFlags)(
 				AttachmentTypeFlagBits::eDepth * createInfo.UsingDepthAttachment |
 				AttachmentTypeFlagBits::eStencil * createInfo.UsingStencilAttachment);
-
-			auto& Recent = configs.emplace_back();
-			Recent.Layout = createInfo.DepthStencilAttachment.Layout;
-			Recent.Usage = createInfo.DepthStencilAttachment.Usage;
-			Recent.AttachmentDesc.setFormat(createInfo.DepthStencilAttachment.Format);
-			Recent.AttachmentDesc.setSamples(createInfo.DepthStencilAttachment.Samples);
-			Recent.AttachmentDesc.setLoadOp(createInfo.DepthStencilAttachment.LoadOp);
-			Recent.AttachmentDesc.setStoreOp(createInfo.DepthStencilAttachment.StoreOp);
-			Recent.AttachmentDesc.setStencilLoadOp(createInfo.DepthStencilAttachment.StencilLoadOp);
-			Recent.AttachmentDesc.setStencilStoreOp(createInfo.DepthStencilAttachment.StencilStoreOp);
-			Recent.AttachmentDesc.setInitialLayout(createInfo.DepthStencilAttachment.Layout);
-			Recent.AttachmentDesc.setFinalLayout(createInfo.DepthStencilAttachment.Layout);
 		}
 
 		auto Handle = Core::Utils::CreateRenderPass(*mDevice, configs, 
@@ -65,22 +55,27 @@ public:
 
 		context.mDevice = Device;
 		context.mPhysicalDevice = mPhysicalDevice;
-		context.mProcessHandler = mProcessHandler;
+		context.mQueueManager = GetQueueManager();
+		context.mCommandPools = mCommandPools;
 		context.mAttachmentFlags = attachmentFlags;
 
 		return context;
 	}
 
+	QueueManagerRef GetQueueManager() const { return mQueueManager; }
+
 	explicit operator bool() const { return static_cast<bool>(mDevice); }
 
 private:
 	Core::Ref<vk::Device> mDevice;
-	ProcessManager mProcessHandler;
 	vk::PhysicalDevice mPhysicalDevice{};
+
+	QueueManagerRef mQueueManager;
+	CommandPools mCommandPools;
 
 	vk::PipelineBindPoint mBindPoint = vk::PipelineBindPoint::eGraphics;
 
-	friend class Device;
+	friend class Context;
 };
 
 VK_END

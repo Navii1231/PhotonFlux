@@ -1,5 +1,5 @@
+#include "Core/Aqpch.h"
 #include "Wavefront/MergeSorterPipeline.h"
-#include <string>
 
 // This code should also be found in $(ProjectDirectory)/Shaders/Utils/ directory...
 

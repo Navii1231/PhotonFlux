@@ -1,8 +1,6 @@
 #pragma once
 #include "../Core/AqCore.h"
 
-#include <string>
-
 AQUA_BEGIN
 
 class CompileErrorChecker

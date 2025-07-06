@@ -1,8 +1,5 @@
 #pragma once
 #include "GLFW_Core.h"
-#include "glm/glm.hpp"
-#include <string>
-#include <iostream>
 
 struct GLFWwindow;
 

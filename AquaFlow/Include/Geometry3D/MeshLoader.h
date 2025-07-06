@@ -1,17 +1,18 @@
 #pragma once
 #include "Geometry.h"
+
 #include "Assimp/Importer.hpp"
 #include "Assimp/postprocess.h"
 #include "Assimp/Scene.h"
-
-#include <unordered_map>
 
 AQUA_BEGIN
 
 // Loads 3D models from files (thread safe)
 // 'MeshLoader' doesn't create any internal state while loading
-// The instance holds only the Assimp configuration that it was created with
+// The instance holds only the Assimp configuration it was created with
 // as a const field, making it optimal for multi threaded environments
+
+// TODO: In this MeshData class, we need to access the shader and its parameters
 class MeshLoader
 {
 public:

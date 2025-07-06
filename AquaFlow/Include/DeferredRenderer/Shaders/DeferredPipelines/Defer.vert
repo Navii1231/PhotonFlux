@@ -4,7 +4,7 @@ layout(location = 0) in vec4 iPosition;
 layout(location = 1) in vec4 iNormal;
 layout(location = 2) in vec4 iTangent;
 layout(location = 3) in vec4 iBitangent;
-layout(location = 4) in vec2 iTexCoords;
+layout(location = 4) in vec3 iTexCoords;
 layout(location = 5) in vec2 iMatID_MeshID; // Holds material id and mesh id
 
 layout(set = 0, binding = 0) uniform CameraInfo
@@ -23,7 +23,7 @@ layout (location = 0) out vec4 vPosition;
 layout (location = 1) out vec4 vNormal;
 layout (location = 2) out vec4 vTangent;
 layout (location = 3) out vec4 vBitangent;
-layout (location = 4) out vec2 vTexCoords;
+layout (location = 4) out vec3 vTexCoords;
 layout (location = 5) out vec2 vMatID_MeshID;
 
 void main()

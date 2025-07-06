@@ -4,11 +4,9 @@
 #include "glslang/SPIRV/GlslangToSpv.h"
 #include "glslang/Public/ResourceLimits.h"
 
-#include <string>
-#include <vector>
-
 VK_BEGIN
 
+// Set number --> all of its the bindings
 using DescSetLayoutBindingMap = std::unordered_map<uint32_t, std::vector<vk::DescriptorSetLayoutBinding>>;
 using PushConstantSubrangeInfos = std::unordered_map<std::string, vk::PushConstantRange>;
 

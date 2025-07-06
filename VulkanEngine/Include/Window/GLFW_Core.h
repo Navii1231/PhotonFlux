@@ -10,5 +10,4 @@
 #include "GLFW/glfw3.h"
 #include <GLFW/glfw3native.h>
 
-#include <fstream>
-#include <string>
+#include "../Core/Config.h"

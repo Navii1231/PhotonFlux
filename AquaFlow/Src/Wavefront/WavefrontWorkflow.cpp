@@ -1,4 +1,6 @@
+#include "Core/Aqpch.h"
 #include "Wavefront/WavefrontWorkflow.h"
+#include "Wavefront/WavefrontConfig.h"
 
 AQUA_BEGIN
 
@@ -6,30 +8,10 @@ std::string GetShaderDirectory();
 
 AQUA_END
 
-void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::IntersectionPipelineContext::Prepare(uint32_t workGroupSize, float Tolerence)
+void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::IntersectionPipeline::UpdateDescriptors()
 {
-	AddMacro("WORKGROUP_SIZE", std::to_string(workGroupSize));
-	AddMacro("TOLERENCE", std::to_string(Tolerence));
-	AddMacro("MAX_DIS", std::to_string(FLT_MAX));
-	AddMacro("FLT_MAX", std::to_string(FLT_MAX));
+	vkEngine::DescriptorWriter& writer = this->GetDescriptorWriter();
 
-	vkEngine::ShaderInput input{};
-	input.FilePath = GetShaderDirectory() + "Wavefront/Intersection.glsl";
-	input.Stage = vk::ShaderStageFlagBits::eCompute;
-	input.OptimizationFlag = vkEngine::OptimizerFlag::eO3;
-	//input.OptimizationFlag = vkEngine::OptimizerFlag::eNone;
-
-	auto Errors = CompileShaders({ input });
-
-	CompileErrorChecker checker("../vkEngineTester/Logging/ShaderFails/Shader.glsl");
-
-	auto ErrorInfos = checker.GetErrors(Errors);
-	checker.AssertOnError(ErrorInfos);
-}
-
-void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::IntersectionPipelineContext::
-	UpdateDescriptors(vkEngine::DescriptorWriter& writer)
-{
 	vkEngine::StorageBufferWriteInfo rayBufferWrite{};
 	rayBufferWrite.Buffer = mRays.GetNativeHandles().Handle;
 
@@ -48,7 +30,7 @@ void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::IntersectionPipelineContext::
 	UpdateGeometryBuffers(writer);
 }
 
-void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::IntersectionPipelineContext::UpdateGeometryBuffers(
+void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::IntersectionPipeline::UpdateGeometryBuffers(
 	vkEngine::DescriptorWriter& writer)
 {
 /*
@@ -126,28 +108,9 @@ void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::IntersectionPipelineContext::UpdateGeome
 	writer.Update({ 1, 8, 0 }, storageInfo);
 }
 
-void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::RaySortEpilogue::Prepare(uint32_t workGroupSize, RaySortEvent sortEvent)
+void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::RaySortEpiloguePipeline::UpdateDescriptors()
 {
-	mSortingEvent = sortEvent;
-
-	AddMacro("WORKGROUP_SIZE", std::to_string(workGroupSize));
-
-	vkEngine::ShaderInput input{};
-
-	input.FilePath = GetFilePath(sortEvent);
-	input.Stage = vk::ShaderStageFlagBits::eCompute;
-	input.OptimizationFlag = vkEngine::OptimizerFlag::eO3;
-
-	auto Errors = CompileShaders({ input });
-
-	CompileErrorChecker checker("../vkEngineTester/Logging/ShaderFails/Shader.glsl");
-
-	auto ErrorInfos = checker.GetErrors(Errors);
-	checker.AssertOnError(ErrorInfos);
-}
-
-void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::RaySortEpilogue::UpdateDescriptors(vkEngine::DescriptorWriter& writer)
-{
+	vkEngine::DescriptorWriter& writer = this->GetDescriptorWriter();
 
 	if (mSortingEvent == RaySortEvent::eFinish)
 	{
@@ -171,42 +134,10 @@ void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::RaySortEpilogue::UpdateDescriptors(vkEng
 	writer.Update({ 0, 3, 0 }, rayRefs);
 }
 
-std::string AQUA_NAMESPACE::PH_FLUX_NAMESPACE::RaySortEpilogue::GetFilePath(RaySortEvent sortEvent)
+void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::RayRefCounterPipeline::UpdateDescriptors()
 {
-	switch (sortEvent)
-	{
-		case RaySortEvent::ePrepare:
-			return GetShaderDirectory() + "Wavefront/PrepareRaySort.glsl";
-		case RaySortEvent::eFinish:
-			return GetShaderDirectory() + "Wavefront/FinishRaySort.glsl";
-		default:
-			break;
-	}
+	vkEngine::DescriptorWriter& writer = this->GetDescriptorWriter();
 
-	return "[Invalid Path]";
-}
-
-void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::RayRefCounterContext::Prepare(uint32_t workGroupSize)
-{
-	AddMacro("WORKGROUP_SIZE", std::to_string(workGroupSize));
-	AddMacro("PRIMITIVE_TYPE", "uint");
-
-	vkEngine::ShaderInput input{};
-
-	input.FilePath = GetShaderDirectory() + "Utils/CountElements.glsl";
-	input.Stage = vk::ShaderStageFlagBits::eCompute;
-	input.OptimizationFlag = vkEngine::OptimizerFlag::eO3;
-
-	auto Errors = CompileShaders({ input });
-
-	CompileErrorChecker checker("../vkEngineTester/Logging/ShaderFails/Shader.glsl");
-
-	auto ErrorInfos = checker.GetErrors(Errors);
-	checker.AssertOnError(ErrorInfos);
-}
-
-void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::RayRefCounterContext::UpdateDescriptors(vkEngine::DescriptorWriter& writer)
-{
 	vkEngine::StorageBufferWriteInfo rayRefs{};
 	rayRefs.Buffer = mRayRefs.GetNativeHandles().Handle;
 
@@ -218,53 +149,20 @@ void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::RayRefCounterContext::UpdateDescriptors(
 	writer.Update({ 0, 1, 0 }, counts);
 }
 
-void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::PrefixSumContext::Prepare(uint32_t workGroupSize)
+void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::PrefixSumPipeline::UpdateDescriptors()
 {
-	AddMacro("WORKGROUP_SIZE", std::to_string(workGroupSize));
+	vkEngine::DescriptorWriter& writer = this->GetDescriptorWriter();
 
-	vkEngine::ShaderInput input{};
-
-	input.FilePath = GetShaderDirectory() + "Utils/PrefixSum.glsl";
-	input.Stage = vk::ShaderStageFlagBits::eCompute;
-	input.OptimizationFlag = vkEngine::OptimizerFlag::eO3;
-
-	auto Errors = CompileShaders({ input });
-
-	CompileErrorChecker checker("Logging/ShaderFails/Shader.glsl");
-
-	auto ErrorInfos = checker.GetErrors(Errors);
-	checker.AssertOnError(ErrorInfos);
-}
-
-void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::PrefixSumContext::UpdateDescriptors(vkEngine::DescriptorWriter& writer)
-{
 	vkEngine::StorageBufferWriteInfo counts{};
 	counts.Buffer = mRefCounts.GetNativeHandles().Handle;
 
 	writer.Update({ 0, 0, 0 }, counts);
 }
 
-void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::LuminanceMeanContext::Prepare(uint32_t workGroupSize)
+void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::LuminanceMeanPipeline::UpdateDescriptors()
 {
-	AddMacro("WORKGROUP_SIZE", std::to_string(workGroupSize));
+	vkEngine::DescriptorWriter& writer = this->GetDescriptorWriter();
 
-	vkEngine::ShaderInput input{};
-
-	input.FilePath = GetShaderDirectory() + "Wavefront/LuminanceMean.glsl";
-	input.Stage = vk::ShaderStageFlagBits::eCompute;
-	input.OptimizationFlag = vkEngine::OptimizerFlag::eO3;
-	//input.OptimizationFlag = vkEngine::OptimizerFlag::eNone;
-
-	auto Errors = CompileShaders({ input });
-
-	CompileErrorChecker checker("Logging/ShaderFails/Shader.glsl");
-
-	auto ErrorInfos = checker.GetErrors(Errors);
-	checker.AssertOnError(ErrorInfos);
-}
-
-void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::LuminanceMeanContext::UpdateDescriptors(vkEngine::DescriptorWriter& writer)
-{
 	vkEngine::StorageImageWriteInfo mean{};
 	mean.ImageLayout = vk::ImageLayout::eGeneral;
 
@@ -292,36 +190,10 @@ void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::LuminanceMeanContext::UpdateDescriptors(
 	writer.Update({ 1, 9, 0 }, sceneInfo);
 }
 
-void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::PostProcessImageContext::Prepare(const glm::ivec2& workGroupSize)
+void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::PostProcessImagePipeline::UpdateDescriptors()
 {
-	AddMacro("WORKGROUP_SIZE_X", std::to_string(workGroupSize.x));
-	AddMacro("WORKGROUP_SIZE_Y", std::to_string(workGroupSize.y));
+	vkEngine::DescriptorWriter& writer = this->GetDescriptorWriter();
 
-	AddMacro("APPLY_TONE_MAP", std::to_string(static_cast<uint32_t>(PostProcessFlagBits::eToneMap)));
-
-	AddMacro("APPLY_GAMMA_CORRECTION", 
-		std::to_string(static_cast<uint32_t>(PostProcessFlagBits::eGammaCorrection)));
-
-	AddMacro("APPLY_GAMMA_CORRECTION_INV", 
-		std::to_string(static_cast<uint32_t>(PostProcessFlagBits::eGammaCorrectionInv)));
-
-	vkEngine::ShaderInput input{};
-
-	input.FilePath = GetShaderDirectory() + "Wavefront/PostProcessImage.glsl";
-	input.Stage = vk::ShaderStageFlagBits::eCompute;
-	input.OptimizationFlag = vkEngine::OptimizerFlag::eO3;
-	input.OptimizationFlag = vkEngine::OptimizerFlag::eNone;
-
-	auto Errors = CompileShaders({ input });
-
-	CompileErrorChecker checker("../vkEngineTester/Logging/ShaderFails/Shader.glsl");
-
-	auto ErrorInfos = checker.GetErrors(Errors);
-	checker.AssertOnError(ErrorInfos);
-}
-
-void AQUA_NAMESPACE::PH_FLUX_NAMESPACE::PostProcessImageContext::UpdateDescriptors(vkEngine::DescriptorWriter& writer)
-{
 	vkEngine::StorageImageWriteInfo mean{};
 	mean.ImageLayout = vk::ImageLayout::eGeneral;
 

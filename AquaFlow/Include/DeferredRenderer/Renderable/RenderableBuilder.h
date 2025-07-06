@@ -1,7 +1,4 @@
 #pragma once
-#include <type_traits>
-#include <functional>
-
 #include "../../Core/AqCore.h"
 #include "DeferredRenderable.h"
 
@@ -10,59 +7,54 @@ AQUA_BEGIN
 class RenderableBuilder
 {
 public:
-	using CopyFn = std::function<void(vkEngine::GenericBuffer&, const RenderableInfo&)>;
-	using CopyFnList = std::vector<CopyFn>;
+	using CopyVertFn = std::function<void(vkEngine::GenericBuffer&, const RenderableInfo&)>;
+	using CopyIdxFn = std::function<void(vkEngine::GenericBuffer&, const RenderableInfo&)>;
+	using CopyVertFnMap = std::unordered_map<std::string, CopyVertFn>;
 
 public:
 
-	template <typename IdxFn, typename ...VertFn>
-	RenderableBuilder(vkEngine::Device ctx, IdxFn&& idxFn, VertFn&&... vertfn)
-		: mCtx(ctx) 
+	template <typename IdxFn>
+	RenderableBuilder(vkEngine::Context ctx, IdxFn&& idxFn)
+		: mCtx(ctx)
 	{
-		mVertexCopyFuncs = CopyFnList({ vertfn, ... });
-		mResourceManager = mCtx.MakeMemoryResourceManager();
+		mIndexCopyFunc = idxFn;
+		mResourcePool = mCtx.CreateResourcePool();
 	}
 
 	~RenderableBuilder() = default;
 
-	template <size_t Idx, typename Func>
-	void SetCopyFunctions(Func&& func)
-	{
-		std::get<Idx>(mVertexCopyFuncs) = func;
-	}
+	CopyVertFn& operator[](const std::string& name) { return mVertexCopyFuncs[name]; }
 
 	std::shared_ptr<Renderable> CreateRenderable(const RenderableInfo& renderableInfo)
 	{
 		std::shared_ptr<Renderable> renderable = std::make_shared<Renderable>();
 		renderable->Info = renderableInfo;
 
-		vkEngine::BufferCreateInfo createInfo{};
-		createInfo.Size = 1;
-		createInfo.MemProps = vk::MemoryPropertyFlagBits::eHostCoherent;
-		createInfo.Usage = renderableInfo.Usage | vk::BufferUsageFlagBits::eVertexBuffer;
+		renderable->mVertexBuffers.reserve(mVertexCopyFuncs.size());
 
-		renderable->mVertexBuffers.resize(mVertexCopyFuncs.size());
-
-		for (size_t i = 0; i < mVertexCopyFuncs.size(); i++)
+		for (auto& [name, func] : mVertexCopyFuncs)
 		{
-			renderable->mVertexBuffers[i] = mResourceManager.CreateGenericBuffer(createInfo);
-			mVertexCopyFuncs[i](renderable->mVertexBuffers[i], renderableInfo);
+			renderable->mVertexBuffers[name] = mResourcePool.CreateGenericBuffer(
+				renderableInfo.Usage | vk::BufferUsageFlagBits::eVertexBuffer, 
+				vk::MemoryPropertyFlagBits::eHostCoherent);
+			func(renderable->mVertexBuffers[name], renderableInfo);
 		}
 
-		createInfo.Usage = renderableInfo.Usage | vk::BufferUsageFlagBits::eIndexBuffer;
+		renderable->mIndexBuffer = mResourcePool.CreateGenericBuffer(
+			renderableInfo.Usage | vk::BufferUsageFlagBits::eIndexBuffer,
+			vk::MemoryPropertyFlagBits::eHostCoherent);
 
-		renderable->mIndexBuffer = mResourceManager.CreateGenericBuffer(createInfo);
 		mIndexCopyFunc(renderable->mIndexBuffer, renderableInfo);
 		
 		return renderable;
 	}
 
 private:
-	vkEngine::Device mCtx;
-	vkEngine::MemoryResourceManager mResourceManager;
+	vkEngine::Context mCtx;
+	vkEngine::ResourcePool mResourcePool;
 
-	CopyFn mIndexCopyFunc;
-	CopyFnList mVertexCopyFuncs;
+	CopyIdxFn mIndexCopyFunc;
+	CopyVertFnMap mVertexCopyFuncs;
 };
 
 AQUA_END

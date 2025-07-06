@@ -36,7 +36,14 @@ enum class TraceResult
 
 using CameraMovementFlags = vk::Flags<CameraMovementFlagBits>;
 
+struct Ray
+{
+	alignas(16) glm::vec3 Origin;
+	alignas(16) glm::vec3 Direction;
+};
+
 // Set 1
+
 struct Camera
 {
 	alignas(16) glm::vec3 Position = glm::vec3(0.0f, 0.0f, 0.0f);
@@ -65,7 +72,7 @@ struct LightInfo
 	alignas(4) uint32_t BeginIndex = 0;
 	alignas(4) uint32_t Padding = 0;
 	alignas(4) uint32_t EndIndex = 0;
-	alignas(16) LightProperties Props;
+	alignas(4) uint32_t LightPropIndex = uint32_t(-1);
 };
 
 struct MeshInfo
@@ -73,7 +80,7 @@ struct MeshInfo
 	alignas(4) uint32_t BeginIndex = 0;
 	alignas(4) uint32_t Padding = 0;
 	alignas(4) uint32_t EndIndex = 0;
-	alignas(16) Material SurfaceMaterial;
+	alignas(4) uint32_t MaterialIndex = uint32_t(-1);
 };
 
 struct SceneInfo
@@ -82,13 +89,14 @@ struct SceneInfo
 	alignas(8) glm::ivec2 MaxBound = glm::ivec2(0, 0);
 	alignas(8) glm::ivec2 ImageResolution = glm::ivec2(0, 0);
 
-	alignas(4) uint32_t MeshCount = 1;
-	alignas(4) uint32_t LightCount = 1;
+	alignas(4) uint32_t MeshCount = 0;
+	alignas(4) uint32_t LightCount = 0;
 	alignas(4) uint32_t MinBounceLimit = 1;
 	alignas(4) uint32_t MaxBounceLimit = 1;
 	alignas(4) uint32_t PixelSamples = 1;
 
-	alignas(4) uint32_t RandomSeed = 1;
+	alignas(4) uint32_t RandomSeed = 0; // Also works as total material count in wavefront path tracer
+
 	alignas(4) uint32_t ResetImage = 1;
 	alignas(4) uint32_t FrameCount = 1;
 	alignas(4) uint32_t MaxSamples = 4096;
@@ -106,7 +114,9 @@ struct CameraData
 };
 
 using VertexBuffer = vkEngine::Buffer<glm::vec4>;
-using IndexBuffer = vkEngine::Buffer<glm::uvec4>;
+using FaceBuffer = vkEngine::Buffer<glm::uvec4>;
+using NormalBuffer = vkEngine::Buffer<glm::vec4>;
+using TexCoordBuffer = vkEngine::Buffer<glm::vec2>;
 
 struct Node
 {
@@ -121,7 +131,24 @@ struct Node
 	alignas(4) uint32_t SecondChildIndex = 0;
 };
 
-using NodeList = vkEngine::Buffer<Node>;
+using NodeBuffer = vkEngine::Buffer<Node>;
+using MaterialBuffer = vkEngine::Buffer<Material>;
+using LightPropsBuffer = vkEngine::Buffer<LightProperties>;
+using RayBuffer = vkEngine::Buffer<Ray>;
+
+using MeshInfoBuffer = vkEngine::Buffer<MeshInfo>;
+using LightInfoBuffer = vkEngine::Buffer<LightInfo>;
+
+struct GeometryBuffers
+{
+	VertexBuffer Vertices;
+	NormalBuffer Normals;
+	TexCoordBuffer TexCoords;
+
+	FaceBuffer Faces;
+
+	NodeBuffer Nodes;
+};
 
 struct BVH
 {
@@ -132,15 +159,16 @@ struct BVH
 
 struct EstimatorTarget
 {
-	vkEngine::Image PixelMean;
-	vkEngine::Image Presentable;
+	vkEngine::Image PixelMean{};
+	vkEngine::Image PixelVariance{};
+	vkEngine::Image Presentable{};
 
-	glm::ivec2 ImageResolution;
+	glm::ivec2 ImageResolution{};
 };
 
 struct EstimatorCreateInfo
 {
-	vkEngine::Device Context;
+	vkEngine::Context Context;
 	glm::ivec2 TargetResolution;
 
 	std::string ShaderDirectory;

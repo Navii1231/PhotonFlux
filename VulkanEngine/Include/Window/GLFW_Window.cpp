@@ -1,7 +1,5 @@
+#include "Core/vkpch.h" // This cpp file should exist in the src folder
 #include "GLFW_Window.h"
-
-#include <iostream>
-#include <mutex>
 
 static uint32_t sWindowCount = 0;
 static std::mutex sWindowLock;

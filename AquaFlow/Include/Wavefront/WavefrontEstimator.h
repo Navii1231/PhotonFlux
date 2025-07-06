@@ -7,8 +7,6 @@
 
 #include "../Geometry3D/GeometryConfig.h"
 
-#include <random>
-
 AQUA_BEGIN
 PH_BEGIN
 
@@ -26,14 +24,14 @@ public:
 
 	MaterialPipeline CreateMaterialPipeline(const MaterialCreateInfo& createInfo);
 
-	static std::string GetShaderDirectory();
+	static std::string GetShaderDirectory() { return "../AquaFlow/Include/Shaders/"; }
 
 private:
 	// Resources...
 	vkEngine::PipelineBuilder mPipelineBuilder;
-	vkEngine::MemoryResourceManager mMemoryManager;
+	vkEngine::ResourcePool mResourcePool;
 
-	ExecutionPipelineContexts mPipelineContexts;
+	std::shared_ptr<RaySortRecorder> mSortRecorder;
 	
 	std::string mShaderFrontEnd;
 	std::string mShaderBackEnd;
@@ -46,7 +44,6 @@ private:
 private:
 	// Helpers...
 	ExecutionPipelines CreatePipelines();
-	void InitializePipelineContexts();
 
 	void CreateTraceBuffers(SessionInfo& session);
 	void CreateExecutorBuffers(ExecutionInfo& mExecutionInfo, const ExecutorCreateInfo& executorInfo);
@@ -57,6 +54,14 @@ private:
 	std::string StitchFrontAndBackShaders(const std::string& shaderCode);
 
 	MaterialShaderError ImportShaders(std::string& shaderCode);
+
+	vkEngine::PShader GetRayGenerationShader();
+	vkEngine::PShader GetIntersectionShader();
+	vkEngine::PShader GetRaySortEpilogueShader(RaySortEvent sortEvent);
+	vkEngine::PShader GetRayRefCounterShader();
+	vkEngine::PShader GetPrefixSumShader();
+	vkEngine::PShader GetLuminanceMeanShader();
+	vkEngine::PShader GetPostProcessImageShader();
 };
 
 PH_END

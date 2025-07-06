@@ -28,13 +28,13 @@ struct BufferConfig
 
 struct Buffer
 {
-	vk::Buffer Handle;
-	vk::DeviceMemory Memory;
-	vk::MemoryRequirements MemReq;
+	vk::Buffer Handle{};
+	vk::DeviceMemory Memory{};
+	vk::MemoryRequirements MemReq{};
 
 	size_t ElemCount = 0;
 
-	BufferConfig Config;
+	BufferConfig Config{};
 };
 
 struct BufferOwnershipTransferInfo
@@ -46,8 +46,8 @@ struct BufferOwnershipTransferInfo
 	vk::PipelineStageFlags SrcStage;
 	vk::PipelineStageFlags DstStage;
 
-	uint32_t SrcFamilyIndex = -1;
-	uint32_t DstFamilyIndex = -1;
+	uint32_t SrcFamilyIndex = static_cast<uint32_t>(-1);
+	uint32_t DstFamilyIndex = static_cast<uint32_t>(-1);
 };
 
 // Image structs

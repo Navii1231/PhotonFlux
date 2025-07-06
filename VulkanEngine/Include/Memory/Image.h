@@ -49,7 +49,7 @@ private:
 	explicit Image(const Core::Ref<Core::ImageChunk>& chunk)
 		: mChunk(chunk) {}
 
-	friend class MemoryResourceManager;
+	friend class ResourcePool;
 	friend class RenderTargetContext;
 	friend class Framebuffer;
 

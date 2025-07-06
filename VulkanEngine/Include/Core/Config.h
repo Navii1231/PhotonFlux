@@ -1,15 +1,5 @@
 #pragma once
-#include "vulkan/vulkan.hpp"
-#include "spirv_cross/spirv_cross.hpp"
-
-#include "glm/glm.hpp"
-#include "glm/gtc/matrix_transform.hpp"
-
-#include <vector>
-#include <array>
-#include <unordered_map>
-#include <set>
-#include <unordered_set>
+#include "vkpch.h"
 
 #define VK_NAMESPACE      vkEngine
 #define VK_BEGIN          namespace VK_NAMESPACE {

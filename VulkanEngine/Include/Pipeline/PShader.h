@@ -4,24 +4,22 @@
 
 VK_BEGIN
 
-enum class PipelineType
-{
-	eNone               = 1,
-	eGraphics           = 2,
-	eCompute            = 3,
-	eRayTracing         = 4
-};
+// TODO: We might have to adjust the ShaderInput and ShaderCompiler::Compile method a little
+using ShaderMap = std::unordered_map<std::string, ShaderInput>;
 
-class PipelineContext
+// Works as a state machine, so be careful when using it across multiple threads
+class PShader
 {
 public:
-	PipelineContext(PipelineType type)
-		: mType(type), mEnv(mConfig) {}
+	PShader() : mEnv({ 
+				glslang::EShTargetClientVersion::EShTargetVulkan_1_3,
+				glslang::EShTargetLanguageVersion::EShTargetSpv_1_6,
+				440 }) {}
 
 	// User defined stuff...
 
 	void SetCompilerConfig(const CompilerConfig& config)
-	{ mConfig = config; }
+	{ mEnv.SetConfig(config); }
 
 	void AddMacro(const std::string& macro, const std::string& definition)
 	{ mEnv.AddMacro(macro, definition); }
@@ -29,11 +27,20 @@ public:
 	void RemoveMacro(const std::string& macro)
 	{ mEnv.RemoveMacro(macro); }
 
-	// user dependent stuff...
-	virtual void UpdateDescriptors(DescriptorWriter& writer) = 0;
+	void Clear() { mShaders.clear(); }
+
+	// TODO: Implementing it only after adjusting that compiler method
+	//std::string& operator[](const std::string& shaderStage) { mShaders[shaderStage]; }
+
+	inline void SetShader(const std::string& stage, const std::string& shaderCode, 
+		vkEngine::OptimizerFlag opt = vkEngine::OptimizerFlag::eO3);
+
+	inline void SetFilepath(const std::string& stage, const std::string& filepath,
+		vkEngine::OptimizerFlag opt = vkEngine::OptimizerFlag::eO3);
 
 	// Compile shaders and store their result
-	inline std::vector<CompileError> CompileShaders(const std::vector<ShaderInput>& ShaderSrcCode);
+	// TODO: Should this method be public or accessible to the builder only?
+	inline std::vector<CompileError> CompileShaders();
 
 	const PushConstantSubrangeInfos& GetPushConstantSubranges() const { return mPushConstantSubranges; }
 
@@ -41,33 +48,36 @@ public:
 	std::pair<DescSetLayoutBindingMap, std::vector<vk::PushConstantRange>>
 		GetPipelineLayoutInfo() const { return { mPipelineSetLayoutInfo, mPushConstantRanges }; }
 
+	bool IsEmpty(uint32_t setNo, uint32_t bindingNo) const { return GetCount(setNo, bindingNo) == 0; }
+
+	inline uint32_t GetCount(uint32_t setNo, uint32_t bindingNo) const;
 	inline std::vector<ShaderSPIR_V> GetShaderByteCodes() const;
 
 protected:
-	// The fields below is going to be set by the function CompileShaders function...
+	// The fields below is going to be set by the CompileShaders function...
 	DescSetLayoutBindingMap mPipelineSetLayoutInfo;
 	PushConstantSubrangeInfos mPushConstantSubranges;
 	std::vector<vk::PushConstantRange> mPushConstantRanges;
 
 	std::vector<CompileResult> mCompileResults;
 
-	CompilerConfig mConfig
-	{
-		glslang::EShTargetClientVersion::EShTargetVulkan_1_3,
-		glslang::EShTargetLanguageVersion::EShTargetSpv_1_6,
-		440
-	};
-
 	CompilerEnvironment mEnv;
 
 	glm::uvec3 mWorkGroupSize{};
 
-	PipelineType mType = PipelineType::eNone;
+	ShaderMap mShaders;
 
-	template <typename Context, typename BasePipeline>
-	friend class GraphicsPipeline;
+	template <typename Renderable, typename BasePipeline>
+	friend class BasicGraphicsPipeline;
 
-	friend class Device;
+	template <typename BasePipeline>
+	friend class BasicComputePipeline;
+
+	friend class PipelineBuilder;
+
+	// TODO: Next is RayTracing Pipeline
+
+	friend class Context;
 
 private:
 	// Helper methods...
@@ -79,7 +89,7 @@ private:
 		const vk::DescriptorSetLayoutBinding& second) const;
 };
 
-void PipelineContext::SaveLayoutInfos(const CompileResult& result)
+void PShader::SaveLayoutInfos(const CompileResult& result)
 {
 	for (const auto& [SetIndex, Bindings] : result.SetLayoutBindingsMap)
 	{
@@ -106,18 +116,18 @@ void PipelineContext::SaveLayoutInfos(const CompileResult& result)
 				SetInfo.emplace_back(Binding);
 			else
 			{
-
+				// TODO:
 			}
 		}
 	}
 }
 
-void PipelineContext::SavePushConstantRanges(const CompileResult& result)
+void PShader::SavePushConstantRanges(const CompileResult& result)
 {
-	// TODO: Push constants are more complicated than that...
+	// TODO: Push constants turned out to be more complicated...
 	// Vulkan uses shared memory for push constants across all pipeline stages
 	// Therefore, overlapping memory regions across multiple stages must be 
-	// merged into a single one for vulkan to be able to update them
+	// merged into a single large region to update them
 
 	for (const auto& [name, range] : result.LayoutData.PushConstantSubrangeInfos)
 	{
@@ -130,7 +140,7 @@ void PipelineContext::SavePushConstantRanges(const CompileResult& result)
 	}
 }
 
-std::vector<ShaderSPIR_V> PipelineContext::GetShaderByteCodes() const
+std::vector<ShaderSPIR_V> PShader::GetShaderByteCodes() const
 {
 	std::vector<ShaderSPIR_V> byteCodes;
 
@@ -140,14 +150,13 @@ std::vector<ShaderSPIR_V> PipelineContext::GetShaderByteCodes() const
 	return byteCodes;
 }
 
-inline void PipelineContext::SaveShaderMetaData(CompileResult Result)
+inline void PShader::SaveShaderMetaData(CompileResult Result)
 {
 	if (Result.MetaData.ShaderType == vk::ShaderStageFlagBits::eCompute)
 		mWorkGroupSize = Result.MetaData.WorkGroupSize;
 }
 
-std::vector<CompileError> PipelineContext::CompileShaders(
-	const std::vector<ShaderInput>& ShaderSrcCode)
+std::vector<CompileError> PShader::CompileShaders()
 {
 	ShaderCompiler compiler(mEnv);
 
@@ -156,14 +165,14 @@ std::vector<CompileError> PipelineContext::CompileShaders(
 	mPushConstantRanges.clear();
 
 	mCompileResults.clear();
-	mCompileResults.reserve(ShaderSrcCode.size());
+	mCompileResults.reserve(mShaders.size());
 
 	std::vector<CompileError> Errors;
-	Errors.reserve(ShaderSrcCode.size());
+	Errors.reserve(mShaders.size());
 
-	for (const auto& srcCode : ShaderSrcCode)
+	for (const auto& [stage, shader] : mShaders)
 	{
-		auto Result = compiler.Compile(srcCode);
+		auto Result = compiler.Compile(shader);
 		Errors.push_back(Result.Error);
 
 		// Retrieve the reflection results...
@@ -177,12 +186,39 @@ std::vector<CompileError> PipelineContext::CompileShaders(
 	return Errors;
 }
 
-bool PipelineContext::CheckIfSameBindings(const vk::DescriptorSetLayoutBinding& first, 
+bool PShader::CheckIfSameBindings(const vk::DescriptorSetLayoutBinding& first, 
 	const vk::DescriptorSetLayoutBinding& second) const
 {
 	return first.binding == second.binding && 
 		first.descriptorCount == second.descriptorCount &&
 		first.descriptorType == second.descriptorType;
+}
+
+void PShader::SetShader(const std::string& stage, const std::string& shaderCode, 
+	vkEngine::OptimizerFlag opt /*= vkEngine::OptimizerFlag::eO3*/)
+{
+	mShaders[stage] = { shaderCode, ShaderCompiler::GetShaderStageFlag(stage), "", opt };
+}
+
+void PShader::SetFilepath(const std::string& stage, const std::string& filepath, vkEngine::OptimizerFlag opt /*= vkEngine::OptimizerFlag::eO3*/)
+{
+	mShaders[stage] = { "", ShaderCompiler::GetShaderStageFlag(stage), filepath, opt};
+}
+
+inline uint32_t PShader::GetCount(uint32_t setNo, uint32_t bindingNo) const
+{
+	auto bindings = mPipelineSetLayoutInfo.find(setNo);
+
+	if (bindings == mPipelineSetLayoutInfo.end())
+		return 0;
+
+	for (const auto& binding : bindings->second)
+	{
+		if (binding.binding == bindingNo)
+			return binding.descriptorCount;
+	}
+
+	return 0;
 }
 
 VK_END
